@@ -1,6 +1,9 @@
 import React from "react";
 import {
   Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   Wizard,
   WizardStep,
   Title,
@@ -8,12 +11,15 @@ import {
   Form,
   FormGroup,
   Radio,
+  Checkbox,
   TextInput,
   TextArea,
+  FileUpload,
   FormSelect,
   FormSelectOption,
   Button,
   Label,
+  Spinner,
   DescriptionList,
   DescriptionListGroup,
   DescriptionListTerm,
@@ -22,10 +28,33 @@ import {
 } from "@patternfly/react-core";
 import { InfoCircleIcon } from "@patternfly/react-icons";
 
+import ValidationErrorModal from "../components/common/ValidationErrorModal";
 import "./storage-vm-deploy-wizard.scss";
+import {
+  duplicateMessage,
+  getIpFromCidr,
+  isHostname,
+  isIpv4,
+  optionalIpv4,
+  requireHostname,
+  requireIpv4,
+  requireIpv4Cidr,
+} from "./validation";
 
-type DiskMode = "raid" | "lun";
-type StorageTrafficMode = "passthrough" | "bridge";
+type DiskMode = "rp" | "lp";
+type StorageTrafficMode = "np" | "npb" | "bn";
+type HostsFileMode = "existing" | "new";
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+interface DiskOption {
+  id: string;
+  value: string;
+  label: string;
+}
 
 interface ClusterHostRow {
   hostName: string;
@@ -68,17 +97,49 @@ const DEFAULT_HOSTS: ClusterHostRow[] = [
   },
 ];
 
+const ROOT_DISK = "150 GiB (THIN Provisioning)";
+
+const RAID_DISKS: DiskOption[] = [
+  { id: "raid-1", value: "0000:5e:00.0", label: "0000:5e:00.0 Broadcom MegaRAID SAS-3 Controller" },
+  { id: "raid-2", value: "0000:af:00.0", label: "0000:af:00.0 Broadcom MegaRAID SAS-3 Controller" },
+];
+
+const LUN_DISKS: DiskOption[] = [
+  { id: "lun-1", value: "/dev/disk/by-path/pci-0000:5e:00.0-scsi-0:2:0:0", label: "/dev/sdb running 1.8T INTEL_SSD" },
+  { id: "lun-2", value: "/dev/disk/by-path/pci-0000:5e:00.0-scsi-0:2:1:0", label: "/dev/sdc running 1.8T INTEL_SSD" },
+  { id: "lun-3", value: "/dev/disk/by-path/pci-0000:af:00.0-scsi-0:2:0:0", label: "/dev/sdd running 1.8T SAMSUNG_SSD" },
+];
+
+const BRIDGE_OPTIONS: SelectOption[] = [
+  { value: "bridge0", label: "bridge0 (connected)" },
+  { value: "bridge1", label: "bridge1 (connected)" },
+  { value: "bridge2", label: "bridge2 (disconnected)" },
+];
+
+const NIC_OPTIONS: SelectOption[] = [
+  { value: "0000:18:00.0", label: "eno1 ethernet 0000:18:00.0 (connected)" },
+  { value: "0000:18:00.1", label: "eno2 ethernet 0000:18:00.1 (connected)" },
+  { value: "0000:3b:00.0", label: "ens1f0 ethernet 0000:3b:00.0 (connected)" },
+  { value: "0000:3b:00.1", label: "ens1f1 ethernet 0000:3b:00.1 (connected)" },
+];
+
 export default function StorageVmDeployWizardModal({
   isOpen,
   onClose,
 }: StorageVmDeployWizardModalProps) {
   const [cpu, setCpu] = React.useState("8");
   const [memory, setMemory] = React.useState("16");
-  const [diskMode, setDiskMode] = React.useState<DiskMode>("raid");
-  const [mgmtBridge, setMgmtBridge] = React.useState("br-mgmt0");
-  const [storageTrafficMode, setStorageTrafficMode] = React.useState<StorageTrafficMode>("passthrough");
-  const [storageBridge, setStorageBridge] = React.useState("br-storage0");
-  const [replicaBridge, setReplicaBridge] = React.useState("br-replica0");
+  const [diskMode, setDiskMode] = React.useState<DiskMode>("rp");
+  const [selectedDisks, setSelectedDisks] = React.useState<string[]>([RAID_DISKS[0].value]);
+  const [mgmtBridge, setMgmtBridge] = React.useState("bridge0");
+  const [storageTrafficMode, setStorageTrafficMode] = React.useState<StorageTrafficMode>("np");
+  const [storageNic1, setStorageNic1] = React.useState(NIC_OPTIONS[0].value);
+  const [storageNic2, setStorageNic2] = React.useState(NIC_OPTIONS[1].value);
+  const [replicaNic1, setReplicaNic1] = React.useState(NIC_OPTIONS[2].value);
+  const [replicaNic2, setReplicaNic2] = React.useState(NIC_OPTIONS[3].value);
+  const [storageBridge, setStorageBridge] = React.useState("bridge1");
+  const [replicaBridge, setReplicaBridge] = React.useState("bridge2");
+  const [hostsFileMode, setHostsFileMode] = React.useState<HostsFileMode>("existing");
   const [hostCount, setHostCount] = React.useState(3);
   const [hosts, setHosts] = React.useState<ClusterHostRow[]>(DEFAULT_HOSTS);
   const [currentHostname] = React.useState("ablecube21");
@@ -90,12 +151,11 @@ export default function StorageVmDeployWizardModal({
   const [storageIp, setStorageIp] = React.useState("100.100.2.11/24");
   const [replicaIp, setReplicaIp] = React.useState("100.200.2.11/24");
   const [ccvmMgmtIp, setCcvmMgmtIp] = React.useState("10.10.2.10");
-  const [mgmtVlan, setMgmtVlan] = React.useState("");
-  const [storageVlan, setStorageVlan] = React.useState("");
-  const [replicaVlan, setReplicaVlan] = React.useState("");
 
   const [sshPrivateKey, setSshPrivateKey] = React.useState("");
   const [sshPublicKey, setSshPublicKey] = React.useState("");
+  const [sshPrivateFilename, setSshPrivateFilename] = React.useState("");
+  const [sshPublicFilename, setSshPublicFilename] = React.useState("");
 
   const [reviewOpen, setReviewOpen] = React.useState({
     device: true,
@@ -103,15 +163,26 @@ export default function StorageVmDeployWizardModal({
     ssh: true,
   });
   const [disableNav, setDisableNav] = React.useState(false);
+  const [showDeployConfirm, setShowDeployConfirm] = React.useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = React.useState(false);
+  const [isDeployStarted, setIsDeployStarted] = React.useState(false);
+  const [validationMessage, setValidationMessage] = React.useState("");
+  const deployNextStepRef = React.useRef<(() => void) | null>(null);
 
   const resetState = React.useCallback(() => {
     setCpu("8");
     setMemory("16");
-    setDiskMode("raid");
-    setMgmtBridge("br-mgmt0");
-    setStorageTrafficMode("passthrough");
-    setStorageBridge("br-storage0");
-    setReplicaBridge("br-replica0");
+    setDiskMode("rp");
+    setSelectedDisks([RAID_DISKS[0].value]);
+    setMgmtBridge("bridge0");
+    setStorageTrafficMode("np");
+    setStorageNic1(NIC_OPTIONS[0].value);
+    setStorageNic2(NIC_OPTIONS[1].value);
+    setReplicaNic1(NIC_OPTIONS[2].value);
+    setReplicaNic2(NIC_OPTIONS[3].value);
+    setStorageBridge("bridge1");
+    setReplicaBridge("bridge2");
+    setHostsFileMode("existing");
     setHostCount(3);
     setHosts(DEFAULT_HOSTS);
     setScvmHostname("scvm1");
@@ -121,13 +192,16 @@ export default function StorageVmDeployWizardModal({
     setStorageIp("100.100.2.11/24");
     setReplicaIp("100.200.2.11/24");
     setCcvmMgmtIp("10.10.2.10");
-    setMgmtVlan("");
-    setStorageVlan("");
-    setReplicaVlan("");
     setSshPrivateKey("");
     setSshPublicKey("");
+    setSshPrivateFilename("");
+    setSshPublicFilename("");
     setReviewOpen({ device: true, additional: true, ssh: true });
     setDisableNav(false);
+    setShowDeployConfirm(false);
+    setShowCancelConfirm(false);
+    setIsDeployStarted(false);
+    setValidationMessage("");
   }, []);
 
   const handleClose = () => {
@@ -135,14 +209,18 @@ export default function StorageVmDeployWizardModal({
     resetState();
   };
 
+  const requestClose = () => {
+    setShowCancelConfirm(true);
+  };
+
   const updateHostCount = (nextCount: number) => {
-    const safeCount = Math.max(1, Math.min(9, nextCount));
+    const safeCount = Math.max(3, Math.min(99, nextCount));
     setHostCount(safeCount);
     setHosts((prev) => {
       if (safeCount === prev.length) return prev;
       if (safeCount < prev.length) return prev.slice(0, safeCount);
       const extras = Array.from({ length: safeCount - prev.length }, (_, idx) => ({
-        hostName: `ablecube${prev.length + idx + 1}`,
+        hostName: `ablecube${prev.length + idx + 21}`,
         hostIp: "",
         scvmMgmtIp: "",
         hostPnIp: "",
@@ -153,17 +231,188 @@ export default function StorageVmDeployWizardModal({
     });
   };
 
+  const updateHost = (index: number, key: keyof ClusterHostRow, value: string) => {
+    setHosts((prev) => prev.map((host, hostIndex) => (
+      hostIndex === index ? { ...host, [key]: value } : host
+    )));
+  };
+
+  const readTextFile = (
+    file: File,
+    setFilename: (filename: string) => void,
+    setText: (text: string) => void
+  ) => {
+    setFilename(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setText(typeof reader.result === "string" ? reader.result : "");
+    reader.readAsText(file);
+  };
+
+  const getOptionLabel = (options: SelectOption[], value: string) =>
+    options.find((option) => option.value === value)?.label || value || "미입력";
+
+  const currentDiskOptions = diskMode === "rp" ? RAID_DISKS : LUN_DISKS;
+  const diskModeLabel = diskMode === "rp" ? "RAID Passthrough" : "LUN Passthrough";
+  const storageTrafficModeLabel =
+    storageTrafficMode === "np"
+      ? "NIC Passthrough"
+      : storageTrafficMode === "npb"
+        ? "NIC Passthrough Bonding"
+        : "Bridge Network";
+
+  const selectedDiskLabels = selectedDisks
+    .map((diskValue) => currentDiskOptions.find((disk) => disk.value === diskValue)?.label || diskValue)
+    .filter(Boolean);
+
+  const handleDiskModeChange = (nextMode: DiskMode) => {
+    setDiskMode(nextMode);
+    setSelectedDisks(nextMode === "rp" ? [RAID_DISKS[0].value] : [LUN_DISKS[0].value]);
+  };
+
+  const toggleSelectedDisk = (diskValue: string, checked: boolean) => {
+    setSelectedDisks((prev) =>
+      checked ? [...prev, diskValue] : prev.filter((value) => value !== diskValue)
+    );
+  };
+
+  const handleStorageTrafficModeChange = (nextMode: StorageTrafficMode) => {
+    setStorageTrafficMode(nextMode);
+    if (nextMode === "bn") {
+      setStorageBridge("bridge1");
+      setReplicaBridge("bridge2");
+      return;
+    }
+    setStorageNic1(NIC_OPTIONS[0].value);
+    setStorageNic2(NIC_OPTIONS[1].value);
+    setReplicaNic1(NIC_OPTIONS[2].value);
+    setReplicaNic2(NIC_OPTIONS[3].value);
+  };
+
   const buildHostsPreview = () => {
     const lines: string[] = [];
     lines.push(`${ccvmMgmtIp} ccvm-mngt ccvm`);
-    hosts.forEach((row) => {
-      lines.push(`${row.hostIp} ${row.hostName}`);
-      lines.push(`${row.scvmMgmtIp} scvm-mngt scvm-${row.hostName}`);
-      lines.push(`${row.hostPnIp} pn-${row.hostName}`);
-      lines.push(`${row.scvmPnIp} pn-scvm`);
-      lines.push(`${row.scvmCnIp} cn-scvm`);
+    hosts.slice(0, hostCount).forEach((row, index) => {
+      const hostIndex = index + 1;
+      lines.push(`${row.hostIp}\t${row.hostName}${row.hostName === currentHostname ? "\tablecube" : ""}`);
+      lines.push(`${row.scvmMgmtIp}\tscvm${hostIndex}-mngt${row.hostName === currentHostname ? "\tscvm-mngt" : ""}`);
+      lines.push(`${row.hostPnIp}\tpn-ablecube${hostIndex}${row.hostName === currentHostname ? "\tpn-ablecube" : ""}`);
+      lines.push(`${row.scvmPnIp}\tscvm${hostIndex}${row.hostName === currentHostname ? "\tscvm" : ""}`);
+      lines.push(`${row.scvmCnIp}\tcn-scvm${hostIndex}${row.hostName === currentHostname ? "\tcn-scvm" : ""}`);
     });
     return lines.join("\n");
+  };
+
+  const buildManagementTrafficReview = () => `관리용 : ${getOptionLabel(BRIDGE_OPTIONS, mgmtBridge)}`;
+
+  const buildStorageTrafficReview = () => {
+    if (storageTrafficMode === "bn") {
+      return [
+        `서버용1 : ${getOptionLabel(BRIDGE_OPTIONS, storageBridge)}`,
+        `복제용1 : ${getOptionLabel(BRIDGE_OPTIONS, replicaBridge)}`,
+      ];
+    }
+    if (storageTrafficMode === "npb") {
+      return [
+        `서버용1 : ${getOptionLabel(NIC_OPTIONS, storageNic1)}`,
+        `서버용2 : ${getOptionLabel(NIC_OPTIONS, storageNic2)}`,
+        `복제용1 : ${getOptionLabel(NIC_OPTIONS, replicaNic1)}`,
+        `복제용2 : ${getOptionLabel(NIC_OPTIONS, replicaNic2)}`,
+      ];
+    }
+    return [
+      `서버용1 : ${getOptionLabel(NIC_OPTIONS, storageNic1)}`,
+      `복제용1 : ${getOptionLabel(NIC_OPTIONS, replicaNic1)}`,
+    ];
+  };
+
+  const validateStorageVmDeploy = () => {
+    if (!cpu) return "CPU를 입력해주세요.";
+    if (!memory) return "Memory를 입력해주세요.";
+    if (selectedDisks.length === 0) return "디스크를 입력해주세요.";
+    if (!mgmtBridge) return "관리 NIC용 Bridge를 입력해주세요.";
+
+    if (storageTrafficMode === "bn") {
+      if (!storageBridge) return "서버용 Bridge를 입력해주세요.";
+      if (!replicaBridge) return "복제용 Bridge를 입력해주세요.";
+      if (storageBridge === replicaBridge) return "Bridge Network 스토리지 트래픽 구성 값을 다르게 입력해주세요.";
+    } else if (storageTrafficMode === "npb") {
+      if (!storageNic1) return "서버용 NIC 1번을 입력해주세요.";
+      if (!storageNic2) return "서버용 NIC 2번을 입력해주세요.";
+      if (!replicaNic1) return "복제용 NIC 1번을 입력해주세요.";
+      if (!replicaNic2) return "복제용 NIC 2번을 입력해주세요.";
+      const duplicateNic = duplicateMessage(
+        [storageNic1, storageNic2, replicaNic1, replicaNic2],
+        "NIC Passthrough Bonding 스토리지 트래픽 구성 값을 다르게 입력해주세요."
+      );
+      if (duplicateNic) return duplicateNic;
+    } else {
+      if (!storageNic1) return "서버용 NIC 1번을 입력해주세요.";
+      if (!replicaNic1) return "복제용 NIC 1번을 입력해주세요.";
+      if (storageNic1 === replicaNic1) return "NIC Passthrough 스토리지 트래픽 구성 값을 다르게 입력해주세요.";
+    }
+
+    for (let index = 0; index < hostCount; index += 1) {
+      const row = hosts[index];
+      if (!row) return "클러스터 구성 프로파일 정보를 확인해 주세요.";
+      const hostLabel = `${index + 1}번 호스트`;
+      if (!row.hostName || !row.hostIp || !row.scvmMgmtIp || !row.hostPnIp || !row.scvmPnIp || !row.scvmCnIp) {
+        return "클러스터 구성 프로파일 정보를 확인해 주세요.";
+      }
+      if (!isHostname(row.hostName)) return `${hostLabel} 호스트명 입력 형식을 확인해주세요.`;
+      if (!isIpv4(row.hostIp)) return `${hostLabel} 호스트 IP 형식을 확인해주세요.`;
+      if (!isIpv4(row.scvmMgmtIp)) return `${hostLabel} SCVM MNGT IP 형식을 확인해주세요.`;
+      if (!isIpv4(row.hostPnIp)) return `${hostLabel} 호스트 PN IP 형식을 확인해주세요.`;
+      if (!isIpv4(row.scvmPnIp)) return `${hostLabel} SCVM PN IP 형식을 확인해주세요.`;
+      if (!isIpv4(row.scvmCnIp)) return `${hostLabel} SCVM CN IP 형식을 확인해주세요.`;
+    }
+
+    const hostNameMessage = requireHostname(scvmHostname);
+    if (hostNameMessage) return hostNameMessage;
+    const mgmtIpMessage = requireIpv4Cidr(mgmtIp, "관리 NIC IP");
+    if (mgmtIpMessage) return mgmtIpMessage;
+    const mgmtGatewayMessage = optionalIpv4(mgmtGateway, "관리 NIC Gateway");
+    if (mgmtGatewayMessage) return mgmtGatewayMessage;
+    const mgmtDnsMessage = optionalIpv4(mgmtDns, "관리 NIC DNS");
+    if (mgmtDnsMessage) return mgmtDnsMessage;
+    const storageIpMessage = requireIpv4Cidr(storageIp, "스토리지 서버 NIC IP");
+    if (storageIpMessage) return storageIpMessage;
+    const replicaIpMessage = requireIpv4Cidr(replicaIp, "스토리지 복제 NIC IP");
+    if (replicaIpMessage) return replicaIpMessage;
+    const ccvmIpMessage = requireIpv4(ccvmMgmtIp, "CCVM 관리 IP");
+    if (ccvmIpMessage) return ccvmIpMessage;
+
+    const duplicateProfileIpMessage = duplicateMessage(
+      hosts.slice(0, hostCount).flatMap((row) => [
+        row.hostIp,
+        row.scvmMgmtIp,
+        row.hostPnIp,
+        row.scvmPnIp,
+        row.scvmCnIp,
+      ]),
+      "클러스터 구성 프로파일에 중복된 IP가 존재합니다."
+    );
+    if (duplicateProfileIpMessage) return duplicateProfileIpMessage;
+    const duplicateVmIpMessage = duplicateMessage(
+      [getIpFromCidr(mgmtIp), getIpFromCidr(storageIp), getIpFromCidr(replicaIp), ccvmMgmtIp],
+      "추가 네트워크 정보에 중복된 IP가 존재합니다."
+    );
+    if (duplicateVmIpMessage) return duplicateVmIpMessage;
+
+    return "";
+  };
+
+  const executeMockDeploy = () => {
+    const errorMessage = validateStorageVmDeploy();
+    if (errorMessage) {
+      setValidationMessage(errorMessage);
+      setShowDeployConfirm(false);
+      return;
+    }
+
+    setValidationMessage("");
+    setShowDeployConfirm(false);
+    setIsDeployStarted(true);
+    deployNextStepRef.current?.();
   };
 
   const wizardFooter = (
@@ -181,7 +430,17 @@ export default function StorageVmDeployWizardModal({
     return (
       <div className="ct-storage-vm-wizard__footer">
         {!isFinish && (
-          <Button variant="primary" onClick={goToNextStep}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (isReview) {
+                deployNextStepRef.current = goToNextStep;
+                setShowDeployConfirm(true);
+                return;
+              }
+              goToNextStep();
+            }}
+          >
             {isReview ? "배포" : isDeploy ? "다음" : "다음"}
           </Button>
         )}
@@ -191,7 +450,16 @@ export default function StorageVmDeployWizardModal({
           </Button>
         )}
         {!isFinish && (
-          <Button variant="link" onClick={close}>
+          <Button
+            variant="link"
+            onClick={() => {
+              if (isDeploy) {
+                close();
+                return;
+              }
+              setShowCancelConfirm(true);
+            }}
+          >
             취소
           </Button>
         )}
@@ -205,6 +473,7 @@ export default function StorageVmDeployWizardModal({
   };
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       // onClose={handleClose}
@@ -213,9 +482,8 @@ export default function StorageVmDeployWizardModal({
       className="ct-storage-vm-wizard__modal"
     >
       <Wizard
-        onClose={handleClose}
+        onClose={requestClose}
         onSave={handleClose}
-        height="74vh"
         width="100%"
         navAriaLabel="스토리지센터 가상머신 배포 단계"
         className={disableNav ? "ct-storage-vm-wizard ct-storage-vm-wizard--nav-locked" : "ct-storage-vm-wizard"}
@@ -241,7 +509,7 @@ export default function StorageVmDeployWizardModal({
               type="button"
               className="ct-storage-vm-wizard__close"
               aria-label="Close"
-              onClick={handleClose}
+              onClick={requestClose}
             >
               ×
             </button>
@@ -304,7 +572,7 @@ export default function StorageVmDeployWizardModal({
                     </FormSelect>
                   </FormGroup>
                   <FormGroup label="ROOT Disk" fieldId="storage-vm-root-disk">
-                    <TextInput id="storage-vm-root-disk" value="70 GiB (THIN Provisioning)" isReadOnly />
+                    <TextInput id="storage-vm-root-disk" value={ROOT_DISK} isReadOnly />
                   </FormGroup>
                 </Form>
                 <Alert
@@ -323,6 +591,9 @@ export default function StorageVmDeployWizardModal({
                     메모리는 컨트롤할 호스트의 디스크 용량이 10TB 이내이면 16GiB를, 10 ~ 30 TB이면 32GiB를,
                     30TB를 초과하면 64GiB를 선택해야 합니다.
                   </Content>
+                  <Content component="p">
+                    ROOT Disk의 크기는 150GiB이며 디스크는 Thin Provisioning 방식으로 제공됩니다.
+                  </Content>
                 </Alert>
               </div>
             </WizardStep>,
@@ -337,30 +608,36 @@ export default function StorageVmDeployWizardModal({
                 <Form className="ct-storage-vm-wizard__section ct-storage-vm-wizard__form-horizontal" isHorizontal>
                   <FormGroup label="디스크 구성 방식" isRequired fieldId="storage-vm-disk-mode">
                     <div className="ct-storage-vm-wizard__inline">
-                      <Radio
-                        id="storage-vm-disk-raid"
-                        name="storage-vm-disk-mode"
-                        label="PCI Passthrough"
-                        isChecked={diskMode === "raid"}
-                        onChange={() => setDiskMode("raid")}
-                      />
-                      <Radio
-                        id="storage-vm-disk-lun"
-                        name="storage-vm-disk-mode"
-                        label="LUN Passthrough"
-                        isChecked={diskMode === "lun"}
-                        onChange={() => setDiskMode("lun")}
-                      />
-                    </div>
-                  </FormGroup>
-                  <FormGroup label="디스크 구성 대상 장치" isRequired fieldId="storage-vm-disk-target">
-                    <TextArea
-                      id="storage-vm-disk-target"
-                      value="선택 가능한 디스크 목록이 표시됩니다."
-                      isReadOnly
-                      rows={4}
-                    />
-                  </FormGroup>
+	                      <Radio
+	                        id="storage-vm-disk-raid"
+	                        name="storage-vm-disk-mode"
+	                        label="PCI Passthrough"
+	                        isChecked={diskMode === "rp"}
+	                        onChange={() => handleDiskModeChange("rp")}
+	                      />
+	                      <Radio
+	                        id="storage-vm-disk-lun"
+	                        name="storage-vm-disk-mode"
+	                        label="LUN Passthrough"
+	                        isChecked={diskMode === "lp"}
+	                        onChange={() => handleDiskModeChange("lp")}
+	                      />
+	                    </div>
+	                  </FormGroup>
+	                  <FormGroup label="디스크 구성 대상 장치" isRequired fieldId="storage-vm-disk-target">
+	                    <div className="ct-storage-vm-wizard__disk-list">
+	                      {currentDiskOptions.map((disk) => (
+	                        <div key={disk.id} className="ct-storage-vm-wizard__disk-item">
+	                          <Checkbox
+	                            id={`storage-vm-disk-${disk.id}`}
+	                            label={disk.label}
+	                            isChecked={selectedDisks.includes(disk.value)}
+	                            onChange={(_event, checked) => toggleSelectedDisk(disk.value, checked)}
+	                          />
+	                        </div>
+	                      ))}
+	                    </div>
+	                  </FormGroup>
                 </Form>
                 <Alert
                   isInline
@@ -388,57 +665,136 @@ export default function StorageVmDeployWizardModal({
                   </Content>
                 </Content>
                 <Form className="ct-storage-vm-wizard__section ct-storage-vm-wizard__form-horizontal" isHorizontal>
-                  <FormGroup label="관리 NIC용 Bridge" isRequired fieldId="storage-vm-mgmt-bridge">
-                    <FormSelect
-                      id="storage-vm-mgmt-bridge"
-                      value={mgmtBridge}
-                      onChange={(_event, value) => setMgmtBridge(String(value))}
-                    >
-                      <FormSelectOption value="br-mgmt0" label="br-mgmt0" />
-                      <FormSelectOption value="br-mgmt1" label="br-mgmt1" />
-                    </FormSelect>
-                  </FormGroup>
-                  <FormGroup label="스토리지 트래픽 구성" isRequired fieldId="storage-vm-storage-mode">
-                    <div className="ct-storage-vm-wizard__inline">
-                      <Radio
-                        id="storage-vm-storage-passthrough"
-                        name="storage-vm-storage-mode"
-                        label="NIC Passthrough"
-                        isChecked={storageTrafficMode === "passthrough"}
-                        onChange={() => setStorageTrafficMode("passthrough")}
-                      />
-                      <Radio
-                        id="storage-vm-storage-bridge"
-                        name="storage-vm-storage-mode"
-                        label="Bridge"
-                        isChecked={storageTrafficMode === "bridge"}
-                        onChange={() => setStorageTrafficMode("bridge")}
-                      />
-                    </div>
-                  </FormGroup>
-                  <FormGroup label="서버용 NIC" isRequired fieldId="storage-vm-storage-bridge">
-                    <FormSelect
-                      id="storage-vm-storage-bridge"
-                      value={storageBridge}
-                      onChange={(_event, value) => setStorageBridge(String(value))}
-                    >
-                      <FormSelectOption value="br-storage0" label="br-storage0" />
-                      <FormSelectOption value="br-storage1" label="br-storage1" />
-                    </FormSelect>
-                  </FormGroup>
-                  <FormGroup label="복제용 NIC" isRequired fieldId="storage-vm-replica-bridge">
-                    <FormSelect
-                      id="storage-vm-replica-bridge"
-                      value={replicaBridge}
-                      onChange={(_event, value) => setReplicaBridge(String(value))}
-                    >
-                      <FormSelectOption value="br-replica0" label="br-replica0" />
-                      <FormSelectOption value="br-replica1" label="br-replica1" />
-                    </FormSelect>
-                  </FormGroup>
-                </Form>
-              </div>
-            </WizardStep>,
+	                  <FormGroup label="관리 NIC용 Bridge" isRequired fieldId="storage-vm-mgmt-bridge">
+	                    <FormSelect
+	                      id="storage-vm-mgmt-bridge"
+	                      value={mgmtBridge}
+	                      onChange={(_event, value) => setMgmtBridge(String(value))}
+	                    >
+	                      {BRIDGE_OPTIONS.map((option) => (
+	                        <FormSelectOption key={option.value} value={option.value} label={option.label} />
+	                      ))}
+	                    </FormSelect>
+	                  </FormGroup>
+	                  <FormGroup label="스토리지 NIC 구성 방식" isRequired fieldId="storage-vm-storage-mode">
+	                    <div className="ct-storage-vm-wizard__inline">
+	                      <Radio
+	                        id="storage-vm-storage-passthrough"
+	                        name="storage-vm-storage-mode"
+	                        label="NIC Passthrough"
+	                        isChecked={storageTrafficMode === "np"}
+	                        onChange={() => handleStorageTrafficModeChange("np")}
+	                      />
+	                      <Radio
+	                        id="storage-vm-storage-passthrough-bonding"
+	                        name="storage-vm-storage-mode"
+	                        label="NIC Passthrough Bonding"
+	                        isChecked={storageTrafficMode === "npb"}
+	                        onChange={() => handleStorageTrafficModeChange("npb")}
+	                      />
+	                      <Radio
+	                        id="storage-vm-storage-bridge"
+	                        name="storage-vm-storage-mode"
+	                        label="Bridge Network"
+	                        isChecked={storageTrafficMode === "bn"}
+	                        onChange={() => handleStorageTrafficModeChange("bn")}
+	                      />
+	                    </div>
+	                  </FormGroup>
+	                  <FormGroup label={storageTrafficMode === "npb" ? "서버용 NIC 1/2" : "서버용 NIC"} isRequired fieldId="storage-vm-storage-nic">
+	                    <div className="ct-storage-vm-wizard__stacked-selects">
+	                      {storageTrafficMode === "bn" ? (
+	                        <FormSelect
+	                          id="storage-vm-storage-bridge"
+	                          value={storageBridge}
+	                          onChange={(_event, value) => setStorageBridge(String(value))}
+	                        >
+	                          {BRIDGE_OPTIONS.map((option) => (
+	                            <FormSelectOption key={option.value} value={option.value} label={option.label} />
+	                          ))}
+	                        </FormSelect>
+	                      ) : (
+	                        <>
+	                          <FormSelect
+	                            id="storage-vm-storage-nic1"
+	                            value={storageNic1}
+	                            onChange={(_event, value) => setStorageNic1(String(value))}
+	                          >
+	                            {NIC_OPTIONS.map((option) => (
+	                              <FormSelectOption key={option.value} value={option.value} label={option.label} />
+	                            ))}
+	                          </FormSelect>
+	                          {storageTrafficMode === "npb" && (
+	                            <FormSelect
+	                              id="storage-vm-storage-nic2"
+	                              value={storageNic2}
+	                              onChange={(_event, value) => setStorageNic2(String(value))}
+	                            >
+	                              {NIC_OPTIONS.map((option) => (
+	                                <FormSelectOption key={option.value} value={option.value} label={option.label} />
+	                              ))}
+	                            </FormSelect>
+	                          )}
+	                        </>
+	                      )}
+	                    </div>
+	                  </FormGroup>
+	                  <FormGroup label={storageTrafficMode === "npb" ? "복제용 NIC 1/2" : "복제용 NIC"} isRequired fieldId="storage-vm-replica-nic">
+	                    <div className="ct-storage-vm-wizard__stacked-selects">
+	                      {storageTrafficMode === "bn" ? (
+	                        <FormSelect
+	                          id="storage-vm-replica-bridge"
+	                          value={replicaBridge}
+	                          onChange={(_event, value) => setReplicaBridge(String(value))}
+	                        >
+	                          {BRIDGE_OPTIONS.map((option) => (
+	                            <FormSelectOption key={option.value} value={option.value} label={option.label} />
+	                          ))}
+	                        </FormSelect>
+	                      ) : (
+	                        <>
+	                          <FormSelect
+	                            id="storage-vm-replica-nic1"
+	                            value={replicaNic1}
+	                            onChange={(_event, value) => setReplicaNic1(String(value))}
+	                          >
+	                            {NIC_OPTIONS.map((option) => (
+	                              <FormSelectOption key={option.value} value={option.value} label={option.label} />
+	                            ))}
+	                          </FormSelect>
+	                          {storageTrafficMode === "npb" && (
+	                            <FormSelect
+	                              id="storage-vm-replica-nic2"
+	                              value={replicaNic2}
+	                              onChange={(_event, value) => setReplicaNic2(String(value))}
+	                            >
+	                              {NIC_OPTIONS.map((option) => (
+	                                <FormSelectOption key={option.value} value={option.value} label={option.label} />
+	                              ))}
+	                            </FormSelect>
+	                          )}
+	                        </>
+	                      )}
+	                    </div>
+	                  </FormGroup>
+	                </Form>
+	                <Alert
+	                  isInline
+	                  title="네트워크 자원 구성 시 참고사항"
+	                  variant="info"
+	                  icon={<InfoCircleIcon />}
+	                  className="ct-storage-vm-wizard__info"
+	                >
+	                  <Content component="p">
+	                    네트워크는 관리 네트워크와 스토리지 네트워크로 구성됩니다. 관리 트래픽은 브릿지 방식으로 연결하고,
+	                    스토리지 트래픽은 NIC Passthrough, NIC Passthrough Bonding, Bridge Network 중 하나를 선택합니다.
+	                  </Content>
+	                  <Content component="p">
+	                    NIC Passthrough에서는 서버용 NIC와 복제용 NIC를 서로 다른 장치로 선택해야 하며, Bonding 구성은 서버용/복제용 NIC를 각각 2개씩 사용합니다.
+	                  </Content>
+	                </Alert>
+	              </div>
+	            </WizardStep>,
           ]}
         />
 
@@ -452,16 +808,42 @@ export default function StorageVmDeployWizardModal({
             </Content>
 
             <Form className="ct-storage-vm-wizard__section ct-storage-vm-wizard__form-horizontal" isHorizontal>
+              <FormGroup label="클러스터 구성 파일 준비" isRequired fieldId="storage-vm-hosts-file-mode">
+                <div className="ct-storage-vm-wizard__inline">
+                  <Radio
+                    id="storage-vm-hosts-file-existing"
+                    name="storage-vm-hosts-file-mode"
+                    label="해당 호스트 파일 사용"
+                    isChecked={hostsFileMode === "existing"}
+                    onChange={() => setHostsFileMode("existing")}
+                  />
+                  <Radio
+                    id="storage-vm-hosts-file-new"
+                    name="storage-vm-hosts-file-mode"
+                    label="신규 생성"
+                    isChecked={hostsFileMode === "new"}
+                    onChange={() => setHostsFileMode("new")}
+                  />
+                </div>
+              </FormGroup>
               <FormGroup label="현재 호스트명" isRequired fieldId="storage-vm-current-hostname">
                 <TextInput id="storage-vm-current-hostname" value={currentHostname} isReadOnly />
               </FormGroup>
               <FormGroup label="구성할 호스트 수" isRequired fieldId="storage-vm-host-count">
                 <div className="ct-storage-vm-wizard__stepper">
-                  <Button variant="control" onClick={() => updateHostCount(hostCount - 1)}>
+                  <Button
+                    variant="control"
+                    isDisabled={hostsFileMode === "existing"}
+                    onClick={() => updateHostCount(hostCount - 1)}
+                  >
                     -
                   </Button>
                   <div className="ct-storage-vm-wizard__stepper-value">{hostCount}</div>
-                  <Button variant="control" onClick={() => updateHostCount(hostCount + 1)}>
+                  <Button
+                    variant="control"
+                    isDisabled={hostsFileMode === "existing"}
+                    onClick={() => updateHostCount(hostCount + 1)}
+                  >
                     +
                   </Button>
                   <span className="ct-storage-vm-wizard__stepper-unit">대</span>
@@ -473,25 +855,67 @@ export default function StorageVmDeployWizardModal({
                 <table className="ct-storage-vm-wizard__table">
                   <thead>
                     <tr>
-                      <th>idx</th>
+                      <th>순번</th>
                       <th>호스트명</th>
                       <th>호스트 IP</th>
-                      <th>SCVM MNGT IP</th>
+                      <th>SCVM<br />MNGT IP</th>
                       <th>호스트 PN IP</th>
                       <th>SCVM PN IP</th>
                       <th>SCVM CN IP</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {hosts.map((row, idx) => (
-                      <tr key={`${row.hostName}-${idx}`}>
+                    {hosts.slice(0, hostCount).map((row, idx) => (
+                      <tr key={`storage-vm-host-row-${idx}`}>
                         <td>{idx + 1}</td>
-                        <td>{row.hostName}</td>
-                        <td>{row.hostIp}</td>
-                        <td>{row.scvmMgmtIp}</td>
-                        <td>{row.hostPnIp}</td>
-                        <td>{row.scvmPnIp}</td>
-                        <td>{row.scvmCnIp}</td>
+                        <td>
+                          <TextInput
+                            aria-label={`호스트명 ${idx + 1}`}
+                            value={row.hostName}
+                            isDisabled={hostsFileMode === "existing"}
+                            onChange={(_event, value) => updateHost(idx, "hostName", value)}
+                          />
+                        </td>
+                        <td>
+                          <TextInput
+                            aria-label={`호스트 IP ${idx + 1}`}
+                            value={row.hostIp}
+                            isDisabled={hostsFileMode === "existing"}
+                            onChange={(_event, value) => updateHost(idx, "hostIp", value)}
+                          />
+                        </td>
+                        <td>
+                          <TextInput
+                            aria-label={`SCVM MNGT IP ${idx + 1}`}
+                            value={row.scvmMgmtIp}
+                            isDisabled={hostsFileMode === "existing"}
+                            onChange={(_event, value) => updateHost(idx, "scvmMgmtIp", value)}
+                          />
+                        </td>
+                        <td>
+                          <TextInput
+                            aria-label={`호스트 PN IP ${idx + 1}`}
+                            value={row.hostPnIp}
+                            isDisabled={hostsFileMode === "existing"}
+                            onChange={(_event, value) => updateHost(idx, "hostPnIp", value)}
+                          />
+                        </td>
+                        <td>
+                          <TextInput
+                            aria-label={`SCVM PN IP ${idx + 1}`}
+                            value={row.scvmPnIp}
+                            isDisabled={hostsFileMode === "existing"}
+                            onChange={(_event, value) => updateHost(idx, "scvmPnIp", value)}
+                          />
+                        </td>
+                        <td>
+                          <TextInput
+                            aria-label={`SCVM CN IP ${idx + 1}`}
+                            value={row.scvmCnIp}
+                            isDisabled={hostsFileMode === "existing"}
+                            onChange={(_event, value) => updateHost(idx, "scvmCnIp", value)}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -506,11 +930,12 @@ export default function StorageVmDeployWizardModal({
                 />
               </FormGroup>
               <FormGroup label="관리 NIC IP" isRequired fieldId="storage-vm-mgmt-ip">
-                <div className="ct-storage-vm-wizard__inline-field">
-                  <TextInput id="storage-vm-mgmt-ip" value={mgmtIp} onChange={(_event, value) => setMgmtIp(value)} />
-                  <span>VLAN ID</span>
-                  <TextInput id="storage-vm-mgmt-vlan" value={mgmtVlan} onChange={(_event, value) => setMgmtVlan(value)} />
-                </div>
+                <TextInput
+                  id="storage-vm-mgmt-ip"
+                  value={mgmtIp}
+                  placeholder="xxx.xxx.xxx.xxx/xx 형식으로 입력"
+                  onChange={(_event, value) => setMgmtIp(value)}
+                />
               </FormGroup>
               <FormGroup label="관리 NIC Gateway" fieldId="storage-vm-mgmt-gateway">
                 <TextInput
@@ -527,37 +952,29 @@ export default function StorageVmDeployWizardModal({
                 />
               </FormGroup>
               <FormGroup label="스토리지 서버 NIC IP" isRequired fieldId="storage-vm-storage-ip">
-                <div className="ct-storage-vm-wizard__inline-field">
-                  <TextInput
-                    id="storage-vm-storage-ip"
-                    value={storageIp}
-                    onChange={(_event, value) => setStorageIp(value)}
-                  />
-                  <span>VLAN ID</span>
-                  <TextInput
-                    id="storage-vm-storage-vlan"
-                    value={storageVlan}
-                    onChange={(_event, value) => setStorageVlan(value)}
-                  />
-                </div>
+                <TextInput
+                  id="storage-vm-storage-ip"
+                  value={storageIp}
+                  placeholder="xxx.xxx.xxx.xxx/xx 형식으로 입력"
+                  onChange={(_event, value) => setStorageIp(value)}
+                />
               </FormGroup>
               <FormGroup label="스토리지 복제 NIC IP" isRequired fieldId="storage-vm-replica-ip">
-                <div className="ct-storage-vm-wizard__inline-field">
-                  <TextInput
-                    id="storage-vm-replica-ip"
-                    value={replicaIp}
-                    onChange={(_event, value) => setReplicaIp(value)}
-                  />
-                  <span>VLAN ID</span>
-                  <TextInput
-                    id="storage-vm-replica-vlan"
-                    value={replicaVlan}
-                    onChange={(_event, value) => setReplicaVlan(value)}
-                  />
-                </div>
+                <TextInput
+                  id="storage-vm-replica-ip"
+                  value={replicaIp}
+                  placeholder="xxx.xxx.xxx.xxx/xx 형식으로 입력"
+                  onChange={(_event, value) => setReplicaIp(value)}
+                />
               </FormGroup>
               <FormGroup label="CCVM 관리 IP" isRequired fieldId="storage-vm-ccvm-ip">
-                <TextInput id="storage-vm-ccvm-ip" value={ccvmMgmtIp} onChange={(_event, value) => setCcvmMgmtIp(value)} />
+                <TextInput
+                  id="storage-vm-ccvm-ip"
+                  value={ccvmMgmtIp}
+                  placeholder="xxx.xxx.xxx.xxx 형식으로 입력"
+                  isDisabled={hostsFileMode === "existing"}
+                  onChange={(_event, value) => setCcvmMgmtIp(value)}
+                />
               </FormGroup>
             </Form>
           </div>
@@ -573,19 +990,37 @@ export default function StorageVmDeployWizardModal({
             </Content>
             <Form className="ct-storage-vm-wizard__section ct-storage-vm-wizard__form-horizontal" isHorizontal>
               <FormGroup label="SSH 개인 Key 파일" isRequired fieldId="storage-vm-ssh-private">
+                <FileUpload
+                  id="storage-vm-ssh-private-file"
+                  type="text"
+                  value=""
+                  filename={sshPrivateFilename}
+                  filenamePlaceholder="현재 호스트 id_rsa 자동 사용 또는 파일 선택"
+                  onFileInputChange={(_, file) => readTextFile(file, setSshPrivateFilename, setSshPrivateKey)}
+                  hideDefaultPreview
+                />
                 <TextArea
-                  id="storage-vm-ssh-private"
-                  value={sshPrivateKey}
-                  onChange={(_event, value) => setSshPrivateKey(value)}
+                  className="ct-storage-vm-wizard__file-preview"
+                  value={sshPrivateKey || "현재 호스트 SSH 개인 Key 파일을 자동으로 사용합니다."}
                   rows={4}
+                  readOnly
                 />
               </FormGroup>
               <FormGroup label="SSH 공개 Key 파일" isRequired fieldId="storage-vm-ssh-public">
+                <FileUpload
+                  id="storage-vm-ssh-public-file"
+                  type="text"
+                  value=""
+                  filename={sshPublicFilename}
+                  filenamePlaceholder="현재 호스트 id_rsa.pub 자동 사용 또는 파일 선택"
+                  onFileInputChange={(_, file) => readTextFile(file, setSshPublicFilename, setSshPublicKey)}
+                  hideDefaultPreview
+                />
                 <TextArea
-                  id="storage-vm-ssh-public"
-                  value={sshPublicKey}
-                  onChange={(_event, value) => setSshPublicKey(value)}
+                  className="ct-storage-vm-wizard__file-preview"
+                  value={sshPublicKey || "현재 호스트 SSH 공개 Key 파일을 자동으로 사용합니다."}
                   rows={3}
+                  readOnly
                 />
               </FormGroup>
             </Form>
@@ -635,20 +1070,29 @@ export default function StorageVmDeployWizardModal({
                       <DescriptionListGroup>
                         <DescriptionListTerm>Memory</DescriptionListTerm>
                         <DescriptionListDescription>{memory} GiB</DescriptionListDescription>
-                      </DescriptionListGroup>
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>ROOT Disk</DescriptionListTerm>
-                        <DescriptionListDescription>70 GiB (THIN Provisioning)</DescriptionListDescription>
-                      </DescriptionListGroup>
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>네트워크</DescriptionListTerm>
-                        <DescriptionListDescription>
-                          관리 NIC: {mgmtBridge}
-                        </DescriptionListDescription>
-                        <DescriptionListDescription>
-                          스토리지 NIC: {storageBridge} / 복제 NIC: {replicaBridge}
-                        </DescriptionListDescription>
-                      </DescriptionListGroup>
+	                      </DescriptionListGroup>
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>ROOT Disk</DescriptionListTerm>
+	                        <DescriptionListDescription>{ROOT_DISK}</DescriptionListDescription>
+	                      </DescriptionListGroup>
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>Data Disk</DescriptionListTerm>
+	                        <DescriptionListDescription>
+	                          {selectedDiskLabels.length > 0
+	                            ? selectedDiskLabels.map((disk) => `${diskModeLabel} : ${disk}`).join("\n")
+	                            : "미입력"}
+	                        </DescriptionListDescription>
+	                      </DescriptionListGroup>
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>네트워크</DescriptionListTerm>
+	                        <DescriptionListDescription>
+	                          {buildManagementTrafficReview()}
+	                        </DescriptionListDescription>
+	                        {buildStorageTrafficReview().map((line) => (
+	                          <DescriptionListDescription key={line}>{line}</DescriptionListDescription>
+	                        ))}
+	                        <DescriptionListDescription>스토리지 NIC 구성 방식 : {storageTrafficModeLabel}</DescriptionListDescription>
+	                      </DescriptionListGroup>
                     </DescriptionList>
                   </div>
                 )}
@@ -665,10 +1109,16 @@ export default function StorageVmDeployWizardModal({
                 </button>
                 {reviewOpen.additional && (
                   <div className="ct-storage-vm-wizard__review-body">
-                    <DescriptionList isCompact className="ct-storage-vm-wizard__review-detail">
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>클러스터 구성 프로파일</DescriptionListTerm>
-                        <DescriptionListDescription>
+	                    <DescriptionList isCompact className="ct-storage-vm-wizard__review-detail">
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>클러스터 구성 준비</DescriptionListTerm>
+	                        <DescriptionListDescription>
+	                          {hostsFileMode === "existing" ? "해당 호스트 파일 사용" : "신규 생성"}
+	                        </DescriptionListDescription>
+	                      </DescriptionListGroup>
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>클러스터 구성 프로파일</DescriptionListTerm>
+	                        <DescriptionListDescription>
                           <TextArea
                             readOnly
                             value={buildHostsPreview()}
@@ -680,15 +1130,25 @@ export default function StorageVmDeployWizardModal({
                       <DescriptionListGroup>
                         <DescriptionListTerm>호스트명(SCVM)</DescriptionListTerm>
                         <DescriptionListDescription>{scvmHostname}</DescriptionListDescription>
-                      </DescriptionListGroup>
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>관리 네트워크</DescriptionListTerm>
-                        <DescriptionListDescription>{mgmtIp}</DescriptionListDescription>
-                      </DescriptionListGroup>
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>스토리지 네트워크</DescriptionListTerm>
-                        <DescriptionListDescription>{storageIp}</DescriptionListDescription>
-                      </DescriptionListGroup>
+	                      </DescriptionListGroup>
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>관리네트워크</DescriptionListTerm>
+	                        <DescriptionListDescription>
+	                          IP Addr : {mgmtIp || "미입력"}
+	                          <br />
+	                          Gateway : {mgmtGateway || "미입력"}
+	                          <br />
+	                          DNS : {mgmtDns || "미입력"}
+	                        </DescriptionListDescription>
+	                      </DescriptionListGroup>
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>스토리지네트워크</DescriptionListTerm>
+	                        <DescriptionListDescription>
+	                          서버 IP Addr : {storageIp || "미입력"}
+	                          <br />
+	                          복제 IP Addr : {replicaIp || "미입력"}
+	                        </DescriptionListDescription>
+	                      </DescriptionListGroup>
                       <DescriptionListGroup>
                         <DescriptionListTerm>CCVM 관리 IP</DescriptionListTerm>
                         <DescriptionListDescription>{ccvmMgmtIp}</DescriptionListDescription>
@@ -709,15 +1169,29 @@ export default function StorageVmDeployWizardModal({
                 </button>
                 {reviewOpen.ssh && (
                   <div className="ct-storage-vm-wizard__review-body">
-                    <DescriptionList isCompact className="ct-storage-vm-wizard__review-detail">
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>SSH 개인 Key</DescriptionListTerm>
-                        <DescriptionListDescription>{sshPrivateKey || "-"}</DescriptionListDescription>
-                      </DescriptionListGroup>
-                      <DescriptionListGroup>
-                        <DescriptionListTerm>SSH 공개 Key</DescriptionListTerm>
-                        <DescriptionListDescription>{sshPublicKey || "-"}</DescriptionListDescription>
-                      </DescriptionListGroup>
+	                    <DescriptionList isCompact className="ct-storage-vm-wizard__review-detail">
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>SSH 개인 Key 파일</DescriptionListTerm>
+	                        <DescriptionListDescription>
+	                          <TextArea
+	                            readOnly
+	                            value={sshPrivateKey || sshPrivateFilename || "현재 호스트 id_rsa 자동 사용"}
+	                            rows={5}
+	                            className="ct-storage-vm-wizard__review-textarea"
+	                          />
+	                        </DescriptionListDescription>
+	                      </DescriptionListGroup>
+	                      <DescriptionListGroup>
+	                        <DescriptionListTerm>SSH 공개 Key 파일</DescriptionListTerm>
+	                        <DescriptionListDescription>
+	                          <TextArea
+	                            readOnly
+	                            value={sshPublicKey || sshPublicFilename || "현재 호스트 id_rsa.pub 자동 사용"}
+	                            rows={4}
+	                            className="ct-storage-vm-wizard__review-textarea"
+	                          />
+	                        </DescriptionListDescription>
+	                      </DescriptionListGroup>
                     </DescriptionList>
                   </div>
                 )}
@@ -733,10 +1207,10 @@ export default function StorageVmDeployWizardModal({
                 스토리지센터 가상머신을 배포 중입니다. 전체 4단계 중 4단계 진행 중입니다.
               </Content>
             </Content>
-            <div className="ct-storage-vm-wizard__status-list">
-              <div>
-                <Label color="green" variant="outline">완료</Label>
-                <span>스토리지센터 가상머신 초기화 작업</span>
+	            <div className="ct-storage-vm-wizard__status-list">
+	              <div>
+	                <Label color="green" variant="outline">완료</Label>
+	                <span>스토리지센터 가상머신 초기화 작업</span>
               </div>
               <div>
                 <Label color="green" variant="outline">완료</Label>
@@ -745,12 +1219,15 @@ export default function StorageVmDeployWizardModal({
               <div>
                 <Label color="green" variant="outline">완료</Label>
                 <span>스토리지센터 가상머신 구성</span>
-              </div>
-              <div>
-                <Label color="orange" variant="outline">진행중</Label>
-                <span>스토리지센터 가상머신 배포</span>
-              </div>
-            </div>
+	              </div>
+	              <div>
+	                <Label color={isDeployStarted ? "orange" : "blue"} variant="outline">
+	                  {isDeployStarted ? "진행중" : "준비중"}
+	                </Label>
+	                {isDeployStarted && <Spinner size="sm" />}
+	                <span>스토리지센터 가상머신 배포</span>
+	              </div>
+	            </div>
           </div>
         </WizardStep>
 
@@ -775,5 +1252,51 @@ export default function StorageVmDeployWizardModal({
         </WizardStep>
       </Wizard>
     </Modal>
+    <Modal
+      isOpen={showDeployConfirm}
+      variant="small"
+      aria-label="스토리지센터 가상머신 배포 진행 확인"
+      onClose={() => setShowDeployConfirm(false)}
+    >
+      <ModalHeader title="스토리지센터 가상머신 배포 진행" />
+      <ModalBody>
+        <Content component="p">스토리지센터 가상머신 배포를 진행하시겠습니까?</Content>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="primary" onClick={executeMockDeploy}>
+          실행
+        </Button>
+        <Button variant="link" onClick={() => setShowDeployConfirm(false)}>
+          아니요
+        </Button>
+      </ModalFooter>
+    </Modal>
+    <Modal
+      isOpen={showCancelConfirm}
+      variant="small"
+      aria-label="스토리지센터 가상머신 배포 취소 확인"
+      onClose={() => setShowCancelConfirm(false)}
+    >
+      <ModalHeader title="스토리지센터 가상머신 배포 취소" />
+      <ModalBody>
+        <Content component="p">
+          스토리지센터 가상머신 배포를 취소하시겠습니까? 입력된 데이터는 초기화 됩니다.
+        </Content>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="primary" onClick={handleClose}>
+          실행
+        </Button>
+        <Button variant="link" onClick={() => setShowCancelConfirm(false)}>
+          아니요
+        </Button>
+      </ModalFooter>
+    </Modal>
+    <ValidationErrorModal
+      isOpen={Boolean(validationMessage)}
+      message={validationMessage}
+      onClose={() => setValidationMessage("")}
+    />
+    </>
   );
 }

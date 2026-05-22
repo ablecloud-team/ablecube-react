@@ -66,7 +66,7 @@
 .ct-cluster-config-wizard__type-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: 16px;
 }
 
@@ -143,6 +143,8 @@
 }
 
 .ct-cluster-config-wizard__table {
+  --ct-cluster-config-table-input-font-size: 13px;
+
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
@@ -152,10 +154,57 @@
 .ct-cluster-config-wizard__table th,
 .ct-cluster-config-wizard__table td {
   border: 1px solid #d2d2d2;
-  padding: 6px 8px;
+  padding: 5px 6px;
   text-align: center;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+.ct-cluster-config-wizard__table th:first-child,
+.ct-cluster-config-wizard__table td:first-child {
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+}
+
+.ct-cluster-config-wizard__table .pf-v6-c-form-control {
+  --pf-v6-c-form-control--BorderWidth: 0;
+  --pf-v6-c-form-control--BorderBottomWidth: 0;
+  --pf-v6-c-form-control--BackgroundColor: transparent;
+  --pf-v6-c-form-control--FontSize: var(--ct-cluster-config-table-input-font-size);
+  --pf-v6-c-form-control--PaddingInlineStart: 4px;
+  --pf-v6-c-form-control--PaddingInlineEnd: 4px;
+
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--ct-cluster-config-table-input-font-size) !important;
+  text-align: center;
+  box-shadow: none;
+}
+
+.ct-cluster-config-wizard__table .pf-v6-c-form-control > input,
+.ct-cluster-config-wizard__table .pf-v6-c-form-control__input,
+.ct-cluster-config-wizard__table input {
+  min-width: 0;
+  padding-inline: 4px;
+  font-size: var(--ct-cluster-config-table-input-font-size) !important;
+  text-align: center;
+  text-overflow: clip;
+}
+
+.ct-cluster-config-wizard__field-group {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 0 0;
+  border-top: 1px solid #d2d2d2;
+}
+
+.ct-cluster-config-wizard__field-group-title {
+  padding-top: 4px;
+  font-weight: 700;
 }
 
 .ct-cluster-config-wizard__info {
@@ -275,14 +324,39 @@
   gap: 12px;
 }
 
+.ct-cluster-config-wizard__download-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 30px;
+  margin-left: 15px;
+
+  span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  a {
+    padding-inline: 0;
+    font-weight: 700;
+  }
+}
+
 @media (max-width: 1024px) {
   .ct-cluster-config-wizard__type-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ct-cluster-config-wizard {
     .pf-v6-c-wizard__nav {
       width: 180px;
     }
+  }
+}
+
+@media (max-width: 768px) {
+  .ct-cluster-config-wizard__type-grid {
+    grid-template-columns: 1fr;
   }
 }

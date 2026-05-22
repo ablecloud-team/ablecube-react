@@ -27,6 +27,9 @@ import {
 } from "@patternfly/react-icons";
 
 import cockpit from "cockpit";
+import WwnListModal from "./wwn-list-modal";
+import CheckedConfirmActionModal from "../components/common/CheckedConfirmActionModal";
+import SelectActionModal from "../components/common/SelectActionModal";
 import "./status-card.scss";
 
 const STATUS_META = {
@@ -59,7 +62,10 @@ const DEFAULT_DATA = {
 
 export default function GfsResourceStatus() {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [isMaintenance, setIsMaintenance] = React.useState(false);
+  const [isExternalStorageSyncModalOpen, setIsExternalStorageSyncModalOpen] = React.useState(false);
+  const [isExternalStorageRescanModalOpen, setIsExternalStorageRescanModalOpen] = React.useState(false);
+  const [isWwnListModalOpen, setIsWwnListModalOpen] = React.useState(false);
+  const [isHostRemoveModalOpen, setIsHostRemoveModalOpen] = React.useState(false);
 
   const [data, setData] = React.useState({
     fenceDeviceStatus: "",
@@ -83,6 +89,58 @@ export default function GfsResourceStatus() {
   }, []);
 
   const onSelect = () => setIsOpen(false);
+
+  const openExternalStorageSyncModal = () => {
+    setIsExternalStorageSyncModalOpen(true);
+    setIsOpen(false);
+  };
+
+  const closeExternalStorageSyncModal = () => {
+    setIsExternalStorageSyncModalOpen(false);
+  };
+
+  const confirmExternalStorageSync = () => {
+    // TODO: 백엔드 API 전환 후 multipath sync API로 연결합니다.
+    setIsExternalStorageSyncModalOpen(false);
+  };
+
+  const openExternalStorageRescanModal = () => {
+    setIsExternalStorageRescanModalOpen(true);
+    setIsOpen(false);
+  };
+
+  const closeExternalStorageRescanModal = () => {
+    setIsExternalStorageRescanModalOpen(false);
+  };
+
+  const confirmExternalStorageRescan = () => {
+    // TODO: 백엔드 API 전환 후 storage rescan API로 연결합니다.
+    setIsExternalStorageRescanModalOpen(false);
+  };
+
+  const openWwnListModal = () => {
+    setIsWwnListModalOpen(true);
+    setIsOpen(false);
+  };
+
+  const closeWwnListModal = () => {
+    setIsWwnListModalOpen(false);
+  };
+
+  const openHostRemoveModal = () => {
+    setIsHostRemoveModalOpen(true);
+    setIsOpen(false);
+  };
+
+  const closeHostRemoveModal = () => {
+    setIsHostRemoveModalOpen(false);
+  };
+
+  const confirmHostRemove = (hostname: string) => {
+    // TODO: 백엔드 API 전환 후 GFS host remove API로 연결합니다.
+    console.log("gfs host remove", hostname);
+    setIsHostRemoveModalOpen(false);
+  };
 
   const renderStatusDetail = (statusKey: string, detail?: string, detailLines?: string[]) => {
     const status =
@@ -125,6 +183,7 @@ export default function GfsResourceStatus() {
               isOpen={isOpen}
               onSelect={onSelect}
               onOpenChange={setIsOpen}
+              popperProps={{ placement: "bottom-end", preventOverflow: true }}
               toggle={(toggleRef) => (
                 <MenuToggle
                   ref={toggleRef}
@@ -137,24 +196,17 @@ export default function GfsResourceStatus() {
               )}
             >
               <DropdownList>
-                <DropdownItem
-                  isDisabled={isMaintenance}
-                  onClick={() => {
-                    setIsMaintenance(true);
-                    setIsOpen(false);
-                  }}
-                >
-                  유지보수 모드 설정
+                <DropdownItem onClick={openExternalStorageSyncModal}>
+                  외부 스토리지 동기화
                 </DropdownItem>
-
-                <DropdownItem
-                  isDisabled={!isMaintenance}
-                  onClick={() => {
-                    setIsMaintenance(false);
-                    setIsOpen(false);
-                  }}
-                >
-                  유지보수 모드 해제
+                <DropdownItem onClick={openExternalStorageRescanModal}>
+                  외부 스토리지 재검색
+                </DropdownItem>
+                <DropdownItem onClick={openWwnListModal}>
+                  WWN 목록 조회
+                </DropdownItem>
+                <DropdownItem onClick={openHostRemoveModal}>
+                  호스트 제거
                 </DropdownItem>
               </DropdownList>
             </Dropdown>
@@ -197,6 +249,47 @@ export default function GfsResourceStatus() {
       <CardFooter className="ct-status-card__footer" style={{ color: "#3e8635" }}>
         GFS 리소스가 구성되었습니다.
       </CardFooter>
+
+      <CheckedConfirmActionModal
+        isOpen={isExternalStorageSyncModalOpen}
+        title="외부 스토리지 동기화"
+        message="동기화를 진행하시겠습니까?"
+        warning="해당 장치는 반드시 이중화되어 있어야 합니다. 만약 싱글 패스로 구성되어 있다면 실행하지 마세요."
+        checkLabel="외부 스토리지 설정 확인"
+        onClose={closeExternalStorageSyncModal}
+        onConfirm={confirmExternalStorageSync}
+      />
+
+      <CheckedConfirmActionModal
+        isOpen={isExternalStorageRescanModalOpen}
+        title="외부 스토리지 재검색"
+        message="재검색을 진행하시겠습니까?"
+        warning="외부 스토리지를 먼저 연결해주시기 바랍니다. 스토리지에서 연결이 정상적으로 확인된 후, 작업을 진행해주시기 바랍니다."
+        checkLabel="외부 스토리지 연결 확인"
+        onClose={closeExternalStorageRescanModal}
+        onConfirm={confirmExternalStorageRescan}
+      />
+
+      <WwnListModal
+        isOpen={isWwnListModalOpen}
+        onClose={closeWwnListModal}
+      />
+
+      <SelectActionModal
+        isOpen={isHostRemoveModalOpen}
+        title="호스트 제거"
+        message="제거할 호스트를 선택해 주세요."
+        selectLabel="호스트"
+        options={[
+          { value: "ablecube1", label: "ablecube1" },
+          { value: "ablecube2", label: "ablecube2" },
+          { value: "ablecube3", label: "ablecube3" },
+        ]}
+        warning="호스트를 제거하면 해당 호스트는 클러스터에서 제외되며, 더 이상 자원을 사용할 수 없습니다."
+        checkLabel="호스트명 확인"
+        onClose={closeHostRemoveModal}
+        onConfirm={confirmHostRemove}
+      />
     </Card>
   );
 }

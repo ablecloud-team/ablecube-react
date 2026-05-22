@@ -1,6 +1,9 @@
 import React from "react";
 import {
   Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   Wizard,
   WizardStep,
   Title,
@@ -12,6 +15,7 @@ import {
   Checkbox,
   Alert,
   Label,
+  Spinner,
   DescriptionList,
   DescriptionListGroup,
   DescriptionListTerm,
@@ -19,13 +23,23 @@ import {
 } from "@patternfly/react-core";
 import { InfoCircleIcon, AngleRightIcon } from "@patternfly/react-icons";
 
+import ValidationErrorModal from "../components/common/ValidationErrorModal";
 import "./monitoring-center-wizard.scss";
+import {
+  isInteger,
+  isIpv4,
+  requireEmail,
+  requireIpv4,
+  requirePort,
+} from "./validation";
 
+type ClusterType = "ablestack-hci" | "ablestack-vm" | "ablestack-standalone" | "ablestack-hci-filesystem";
 type DeployPhase = "idle" | "running" | "done";
 
 interface MonitoringCenterWizardModalProps {
   isOpen: boolean;
   onClose: () => void;
+  clusterType?: ClusterType;
 }
 
 const DEFAULT_HOST_COUNT = 3;
@@ -33,9 +47,13 @@ const DEFAULT_CCVM_IP = "10.10.2.10";
 const DEFAULT_CUBE_HOSTS = ["10.10.2.1", "10.10.2.2", "10.10.2.3"];
 const DEFAULT_SCVM_HOSTS = ["10.10.2.11", "10.10.2.12", "10.10.2.13"];
 
+const resizeHostList = (values: string[], count: number) =>
+  Array.from({ length: count }, (_, index) => values[index] ?? "");
+
 export default function MonitoringCenterWizardModal({
   isOpen,
   onClose,
+  clusterType = "ablestack-hci",
 }: MonitoringCenterWizardModalProps) {
   const [hostCount, setHostCount] = React.useState(DEFAULT_HOST_COUNT);
   const [ccvmIp, setCcvmIp] = React.useState(DEFAULT_CCVM_IP);
@@ -47,17 +65,19 @@ export default function MonitoringCenterWizardModal({
   const [smtpPort, setSmtpPort] = React.useState("");
   const [smtpEmail, setSmtpEmail] = React.useState("");
   const [smtpPassword, setSmtpPassword] = React.useState("");
-  const [smtpReceivers, setSmtpReceivers] = React.useState("");
 
   const [reviewOpen, setReviewOpen] = React.useState({
     ip: true,
     smtp: true,
   });
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = React.useState(false);
   const [deployPhase, setDeployPhase] = React.useState<DeployPhase>("idle");
   const [disableNav, setDisableNav] = React.useState(false);
+  const [validationMessage, setValidationMessage] = React.useState("");
 
   const nextStepRef = React.useRef<null | (() => void)>(null);
+  const isScvmRequired = clusterType === "ablestack-hci" || clusterType === "ablestack-hci-filesystem";
 
   const resetState = React.useCallback(() => {
     setHostCount(DEFAULT_HOST_COUNT);
@@ -69,11 +89,12 @@ export default function MonitoringCenterWizardModal({
     setSmtpPort("");
     setSmtpEmail("");
     setSmtpPassword("");
-    setSmtpReceivers("");
     setReviewOpen({ ip: true, smtp: true });
     setConfirmOpen(false);
+    setCancelConfirmOpen(false);
     setDeployPhase("idle");
     setDisableNav(false);
+    setValidationMessage("");
   }, []);
 
   const handleClose = () => {
@@ -81,16 +102,90 @@ export default function MonitoringCenterWizardModal({
     resetState();
   };
 
-  const updateHostCount = (value: string) => {
-    const parsed = Number(value);
-    if (Number.isNaN(parsed)) return;
-    const nextCount = Math.max(1, Math.min(9, parsed));
-    setHostCount(nextCount);
-    setCubeHosts(Array.from({ length: nextCount }, () => ""));
-    setScvmHosts(Array.from({ length: nextCount }, () => ""));
+  const requestClose = () => {
+    setCancelConfirmOpen(true);
   };
 
-  const smtpEnabledLabel = smtpEnabled ? "설정함" : "미설정";
+  const updateHostCount = (value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      setHostCount(0);
+      setCubeHosts([]);
+      setScvmHosts([]);
+      return;
+    }
+    const nextCount = Math.max(1, Math.min(99, parsed));
+    setHostCount(nextCount);
+    setCubeHosts((prev) => resizeHostList(prev, nextCount));
+    setScvmHosts((prev) => resizeHostList(prev, nextCount));
+  };
+
+  const updateCubeHost = (index: number, value: string) => {
+    setCubeHosts((prev) => prev.map((host, hostIndex) => (hostIndex === index ? value : host)));
+  };
+
+  const updateScvmHost = (index: number, value: string) => {
+    setScvmHosts((prev) => prev.map((host, hostIndex) => (hostIndex === index ? value : host)));
+  };
+
+  const handleSmtpEnabledChange = (checked: boolean) => {
+    setSmtpEnabled(checked);
+    if (!checked) {
+      setSmtpServer("");
+      setSmtpPort("");
+      setSmtpEmail("");
+      setSmtpPassword("");
+    }
+  };
+
+  const validateWallMonitoring = () => {
+    if (!hostCount || !Number.isFinite(hostCount) || !isInteger(hostCount)) return "호스트 수를 숫자로 입력해주세요.";
+
+    const ccvmMessage = requireIpv4(ccvmIp, "CCVM 관리 IP");
+    if (ccvmMessage) return ccvmMessage;
+
+    for (let index = 0; index < hostCount; index += 1) {
+      const cubeHost = cubeHosts[index] ?? "";
+      if (!cubeHost) return `Cube${index + 1} 관리 IP를 입력해주세요.`;
+      if (!isIpv4(cubeHost)) return `Cube${index + 1} 관리 IP 형식을 확인해주세요.`;
+    }
+
+    if (isScvmRequired) {
+      for (let index = 0; index < hostCount; index += 1) {
+        const scvmHost = scvmHosts[index] ?? "";
+        if (!scvmHost) return `SCVM${index + 1} 관리 IP를 입력해주세요.`;
+        if (!isIpv4(scvmHost)) return `SCVM${index + 1} 관리 IP 형식을 확인해주세요.`;
+      }
+    }
+
+    if (smtpEnabled) {
+      if (!smtpServer) return "SMTP 서버를 입력해주세요.";
+      const portMessage = requirePort(smtpPort, "SMTP 서버 Port");
+      if (portMessage) return portMessage;
+      const emailMessage = requireEmail(smtpEmail, "관리자 이메일 주소");
+      if (emailMessage) return emailMessage;
+      if (!smtpPassword) return "이메일 비밀번호를 입력해주세요.";
+    }
+
+    return "";
+  };
+
+  const executeMockDeploy = () => {
+    const errorMessage = validateWallMonitoring();
+    if (errorMessage) {
+      setValidationMessage(errorMessage);
+      setConfirmOpen(false);
+      return;
+    }
+
+    setValidationMessage("");
+    setConfirmOpen(false);
+    setDeployPhase("running");
+    setDisableNav(true);
+    nextStepRef.current?.();
+  };
+
+  const smtpEnabledLabel = smtpEnabled ? "선택" : "미선택";
 
   const wizardFooter = (
     activeStep: any,
@@ -102,50 +197,58 @@ export default function MonitoringCenterWizardModal({
     const stepId = String(activeStep.id);
     const isFirst = stepId === "monitoring-overview";
     const isReview = stepId === "monitoring-review";
+    const isDeploy = stepId === "monitoring-deploy";
     const isFinish = stepId === "monitoring-finish";
 
     if (isReview) {
       nextStepRef.current = goToNextStep;
     }
 
-    const handlePrimary = () => {
-      if (isReview) {
-        setConfirmOpen(true);
-        return;
-      }
-      if (isFinish) {
-        if (deployPhase === "running") {
-          setDeployPhase("done");
-          setDisableNav(false);
-          return;
-        }
-        close();
-        return;
-      }
-      goToNextStep();
-    };
-
-    const primaryLabel = isReview
-      ? "구성"
-      : isFinish
-        ? deployPhase === "running"
-          ? "완료"
-          : "닫기"
-        : "다음";
+    if (isDeploy) {
+      return (
+        <div className="ct-monitoring-center-wizard__footer">
+          <Button
+            variant="primary"
+            onClick={() => {
+              setDeployPhase("done");
+              goToNextStep();
+            }}
+          >
+            다음
+          </Button>
+        </div>
+      );
+    }
 
     return (
       <div className="ct-monitoring-center-wizard__footer">
-        <Button variant="primary" onClick={handlePrimary}>
-          {primaryLabel}
-        </Button>
+        {!isFinish && (
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (isReview) {
+                setConfirmOpen(true);
+                return;
+              }
+              goToNextStep();
+            }}
+          >
+            {isReview ? "구성" : "다음"}
+          </Button>
+        )}
         {!isFirst && !isFinish && (
           <Button variant="secondary" onClick={goToPrevStep}>
             이전
           </Button>
         )}
         {!isFinish && (
-          <Button variant="link" onClick={close}>
+          <Button variant="link" onClick={() => setCancelConfirmOpen(true)}>
             취소
+          </Button>
+        )}
+        {isFinish && (
+          <Button variant="primary" onClick={close}>
+            완료
           </Button>
         )}
       </div>
@@ -156,17 +259,15 @@ export default function MonitoringCenterWizardModal({
     <>
       <Modal
         isOpen={isOpen}
-        // onClose={handleClose}
         variant="large"
-        aria-label="모니터링센터 구성 마법사"
+        aria-label="Wall 모니터링 구성 마법사"
         className="ct-monitoring-center-wizard__modal"
       >
         <Wizard
-          onClose={handleClose}
+          onClose={requestClose}
           onSave={handleClose}
-          height="74vh"
           width="100%"
-          navAriaLabel="모니터링센터 구성 단계"
+          navAriaLabel="Wall 모니터링 구성 단계"
           className={
             disableNav
               ? "ct-monitoring-center-wizard ct-monitoring-center-wizard--nav-locked"
@@ -176,14 +277,7 @@ export default function MonitoringCenterWizardModal({
           navProps={{ "aria-disabled": disableNav }}
           onStepChange={(_event, currentStep) => {
             const stepId = String(currentStep.id);
-            if (stepId === "monitoring-finish" && deployPhase === "idle") {
-              setDeployPhase("running");
-            }
-            if (stepId === "monitoring-finish") {
-              setDisableNav(deployPhase !== "done");
-              return;
-            }
-            setDisableNav(false);
+            setDisableNav(stepId === "monitoring-deploy");
           }}
           header={
             <div className="ct-monitoring-center-wizard__header">
@@ -192,14 +286,14 @@ export default function MonitoringCenterWizardModal({
                   Wall 모니터링 구성 마법사
                 </Title>
                 <Content className="ct-monitoring-center-wizard__subtitle">
-                  <Content component="p">ABLESTACK 클라우드센터 VM에 Wall 모니터링 구성합니다.</Content>
+                  <Content component="p">클라우드센터 VM에 Wall 모니터링 구성합니다.</Content>
                 </Content>
               </div>
               <button
                 type="button"
                 className="ct-monitoring-center-wizard__close"
                 aria-label="Close"
-                onClick={handleClose}
+                onClick={requestClose}
               >
                 ×
               </button>
@@ -210,17 +304,15 @@ export default function MonitoringCenterWizardModal({
             <div className="ct-monitoring-center-wizard__content">
               <Content>
                 <Content component="p">
-                  ABLESTACK 클라우드센터 VM에 Wall 모니터링을 구성하기 위해 필요한 정보를 다음과 같이 마법사를 통해
-                  입력받습니다.
+                  클라우드센터 VM에 Wall 모니터링을 구성하기 위해 필요한 정보를 다음과 같이 마법사를 통해 입력받습니다.
                 </Content>
                 <Content component="ul">
                   <Content component="li">Wall 모니터링 수집 대상의 IP 정보</Content>
                   <Content component="li">알림 서비스를 위한 SMTP 설정 정보</Content>
                 </Content>
                 <Content component="p">
-                  필요한 정보를 먼저 준비하십시오. 정보가 준비되었다면 "다음" 버튼을 눌러 Wall 모니터링 구성을
-                  시작합니다.
-                  <br />(현재 버전에서는 TLS를 지원하지 않습니다.)
+                  필요한 정보를 먼저 준비하십시오. 정보가 준비되었다면 "다음" 버튼을 눌러 Wall 모니터링 구성을 시작합니다.
+                  <br />( 현재 버전에서는 TLS를 지원하지 않습니다. )
                 </Content>
               </Content>
             </div>
@@ -230,12 +322,17 @@ export default function MonitoringCenterWizardModal({
             <div className="ct-monitoring-center-wizard__content">
               <Content>
                 <Content component="p">
-                  ABLESTACK 클러스터의 구성 요소인 Cube 호스트, 클라우드센터 VM, 스토리지센터 VM을 모니터링하기 위해
-                  아래 정보를 입력하십시오. (호스트 수가 변경될 경우 입력한 값이 초기화됩니다.)
+                  클러스터의 구성 요소인 Cube 호스트, 클라우드센터 VM, 스토리지센터 VM을 모니터링하기 위해 아래 정보를 입력하십시오.
+                  (호스트 수가 변경될 경우 입력한 값이 초기화됩니다.)
                 </Content>
               </Content>
               <Form className="ct-monitoring-center-wizard__section ct-monitoring-center-wizard__form-horizontal" isHorizontal>
-                <FormGroup label="호스트 수" isRequired fieldId="monitoring-host-count">
+                <FormGroup
+                  label="호스트 수"
+                  isRequired
+                  fieldId="monitoring-host-count"
+                  className="ct-monitoring-center-wizard__host-count-row"
+                >
                   <TextInput
                     id="monitoring-host-count"
                     type="number"
@@ -244,10 +341,11 @@ export default function MonitoringCenterWizardModal({
                   />
                 </FormGroup>
 
-                <div className="ct-monitoring-center-wizard__field-group">
+                <div className="ct-monitoring-center-wizard__field-group ct-monitoring-center-wizard__field-group--single">
                   <div className="ct-monitoring-center-wizard__field-title">클라우드센터 VM</div>
                   <FormGroup label="CCVM 관리 IP" isRequired fieldId="monitoring-ccvm-ip">
                     <TextInput
+                      className="ct-monitoring-center-wizard__ip-input"
                       id="monitoring-ccvm-ip"
                       value={ccvmIp}
                       onChange={(_event, value) => setCcvmIp(String(value))}
@@ -255,53 +353,49 @@ export default function MonitoringCenterWizardModal({
                   </FormGroup>
                 </div>
 
-                <div className="ct-monitoring-center-wizard__field-group">
-                  <div className="ct-monitoring-center-wizard__field-title">Cube 호스트</div>
-                  {cubeHosts.map((value, index) => (
-                    <FormGroup
-                      key={`cube-host-${index}`}
-                      label={`Cube${index + 1} 관리 IP`}
-                      isRequired
-                      fieldId={`monitoring-cube-${index + 1}`}
-                    >
-                      <TextInput
-                        id={`monitoring-cube-${index + 1}`}
-                        value={value}
-                        onChange={(_event, nextValue) => {
-                          setCubeHosts((prev) => {
-                            const next = [...prev];
-                            next[index] = String(nextValue);
-                            return next;
-                          });
-                        }}
-                      />
-                    </FormGroup>
-                  ))}
+                <div className="ct-monitoring-center-wizard__field-group ct-monitoring-center-wizard__field-group--host-list">
+                  <div className="ct-monitoring-center-wizard__field-title">Cube 호스트 ({hostCount || 0}대)</div>
+                  <div className="ct-monitoring-center-wizard__host-list">
+                    {cubeHosts.slice(0, hostCount).map((value, index) => (
+                      <FormGroup
+                        key={`cube-host-${index}`}
+                        label={`Cube${index + 1} 관리 IP`}
+                        isRequired
+                        fieldId={`monitoring-cube-${index + 1}`}
+                      >
+                        <TextInput
+                          className="ct-monitoring-center-wizard__ip-input"
+                          id={`monitoring-cube-${index + 1}`}
+                          value={value}
+                          onChange={(_event, nextValue) => updateCubeHost(index, String(nextValue))}
+                        />
+                      </FormGroup>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="ct-monitoring-center-wizard__field-group">
-                  <div className="ct-monitoring-center-wizard__field-title">스토리지센터 VM</div>
-                  {scvmHosts.map((value, index) => (
-                    <FormGroup
-                      key={`scvm-host-${index}`}
-                      label={`SCVM${index + 1} 관리 IP`}
-                      isRequired
-                      fieldId={`monitoring-scvm-${index + 1}`}
-                    >
-                      <TextInput
-                        id={`monitoring-scvm-${index + 1}`}
-                        value={value}
-                        onChange={(_event, nextValue) => {
-                          setScvmHosts((prev) => {
-                            const next = [...prev];
-                            next[index] = String(nextValue);
-                            return next;
-                          });
-                        }}
-                      />
-                    </FormGroup>
-                  ))}
-                </div>
+                {isScvmRequired && (
+                  <div className="ct-monitoring-center-wizard__field-group ct-monitoring-center-wizard__field-group--host-list">
+                    <div className="ct-monitoring-center-wizard__field-title">스토리지센터 VM ({hostCount || 0}대)</div>
+                    <div className="ct-monitoring-center-wizard__host-list">
+                      {scvmHosts.slice(0, hostCount).map((value, index) => (
+                        <FormGroup
+                          key={`scvm-host-${index}`}
+                          label={`SCVM${index + 1} 관리 IP`}
+                          isRequired
+                          fieldId={`monitoring-scvm-${index + 1}`}
+                        >
+                          <TextInput
+                            className="ct-monitoring-center-wizard__ip-input"
+                            id={`monitoring-scvm-${index + 1}`}
+                            value={value}
+                            onChange={(_event, nextValue) => updateScvmHost(index, String(nextValue))}
+                          />
+                        </FormGroup>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </Form>
               <Alert
                 isInline
@@ -328,7 +422,7 @@ export default function MonitoringCenterWizardModal({
                     id="monitoring-smtp-enabled"
                     label="SMTP 구성 하기"
                     isChecked={smtpEnabled}
-                    onChange={(_event, checked) => setSmtpEnabled(checked)}
+                    onChange={(_event, checked) => handleSmtpEnabledChange(checked)}
                   />
                 </FormGroup>
                 <FormGroup label="SMTP 서버" isRequired fieldId="monitoring-smtp-server">
@@ -363,19 +457,6 @@ export default function MonitoringCenterWizardModal({
                     isDisabled={!smtpEnabled}
                     onChange={(_event, value) => setSmtpPassword(String(value))}
                   />
-                </FormGroup>
-                <FormGroup label="수신 이메일 주소" fieldId="monitoring-smtp-receivers">
-                  <div>
-                    <TextInput
-                      id="monitoring-smtp-receivers"
-                      value={smtpReceivers}
-                      isDisabled={!smtpEnabled}
-                      onChange={(_event, value) => setSmtpReceivers(String(value))}
-                    />
-                    <div className="ct-monitoring-center-wizard__helper-text">
-                      ( ";" 분기리호를 사용하여 여러 이메일 주소를 입력할 수 있습니다. )
-                    </div>
-                  </div>
                 </FormGroup>
               </Form>
               <Alert
@@ -417,31 +498,33 @@ export default function MonitoringCenterWizardModal({
                   </button>
                   {reviewOpen.ip && (
                     <div className="ct-monitoring-center-wizard__review-body">
-                      <DescriptionList isHorizontal className="ct-monitoring-center-wizard__review-detail">
+                      <DescriptionList isCompact className="ct-monitoring-center-wizard__review-detail">
                         <DescriptionListGroup>
                           <DescriptionListTerm>호스트 수</DescriptionListTerm>
-                          <DescriptionListDescription>{hostCount} 대</DescriptionListDescription>
+                          <DescriptionListDescription>{hostCount || "미입력"}</DescriptionListDescription>
                         </DescriptionListGroup>
                         <DescriptionListGroup>
                           <DescriptionListTerm>클라우드센터 VM</DescriptionListTerm>
-                          <DescriptionListDescription>CCVM 관리 IP: {ccvmIp || "미입력"}</DescriptionListDescription>
+                          <DescriptionListDescription>CCVM 관리 IP : {ccvmIp || "미입력"}</DescriptionListDescription>
                         </DescriptionListGroup>
                         <DescriptionListGroup>
                           <DescriptionListTerm>Cube 호스트</DescriptionListTerm>
                           <DescriptionListDescription>
-                            {cubeHosts.map((value, index) => (
-                              <div key={`review-cube-${index}`}>Cube{index + 1} 관리 IP: {value || "미입력"}</div>
+                            {cubeHosts.slice(0, hostCount).map((value, index) => (
+                              <div key={`review-cube-${index}`}>Cube{index + 1} 관리 IP : {value || "미입력"}</div>
                             ))}
                           </DescriptionListDescription>
                         </DescriptionListGroup>
-                        <DescriptionListGroup>
-                          <DescriptionListTerm>스토리지센터 VM</DescriptionListTerm>
-                          <DescriptionListDescription>
-                            {scvmHosts.map((value, index) => (
-                              <div key={`review-scvm-${index}`}>SCVM{index + 1} 관리 IP: {value || "미입력"}</div>
-                            ))}
-                          </DescriptionListDescription>
-                        </DescriptionListGroup>
+                        {isScvmRequired && (
+                          <DescriptionListGroup>
+                            <DescriptionListTerm>스토리지센터 VM</DescriptionListTerm>
+                            <DescriptionListDescription>
+                              {scvmHosts.slice(0, hostCount).map((value, index) => (
+                                <div key={`review-scvm-${index}`}>SCVM{index + 1} 관리 IP : {value || "미입력"}</div>
+                              ))}
+                            </DescriptionListDescription>
+                          </DescriptionListGroup>
+                        )}
                       </DescriptionList>
                     </div>
                   )}
@@ -460,30 +543,26 @@ export default function MonitoringCenterWizardModal({
                   </button>
                   {reviewOpen.smtp && (
                     <div className="ct-monitoring-center-wizard__review-body">
-                      <DescriptionList isHorizontal className="ct-monitoring-center-wizard__review-detail">
+                      <DescriptionList isCompact className="ct-monitoring-center-wizard__review-detail">
                         <DescriptionListGroup>
                           <DescriptionListTerm>SMTP 구성 여부</DescriptionListTerm>
                           <DescriptionListDescription>{smtpEnabledLabel}</DescriptionListDescription>
                         </DescriptionListGroup>
                         <DescriptionListGroup>
                           <DescriptionListTerm>SMTP 서버</DescriptionListTerm>
-                          <DescriptionListDescription>{smtpServer || "미입력"}</DescriptionListDescription>
+                          <DescriptionListDescription>{smtpEnabled ? smtpServer || "미입력" : "N/A"}</DescriptionListDescription>
                         </DescriptionListGroup>
                         <DescriptionListGroup>
                           <DescriptionListTerm>SMTP Port</DescriptionListTerm>
-                          <DescriptionListDescription>{smtpPort || "미입력"}</DescriptionListDescription>
+                          <DescriptionListDescription>{smtpEnabled ? smtpPort || "미입력" : "N/A"}</DescriptionListDescription>
                         </DescriptionListGroup>
                         <DescriptionListGroup>
                           <DescriptionListTerm>관리자 이메일 주소</DescriptionListTerm>
-                          <DescriptionListDescription>{smtpEmail || "미입력"}</DescriptionListDescription>
+                          <DescriptionListDescription>{smtpEnabled ? smtpEmail || "미입력" : "N/A"}</DescriptionListDescription>
                         </DescriptionListGroup>
                         <DescriptionListGroup>
                           <DescriptionListTerm>이메일 비밀번호</DescriptionListTerm>
-                          <DescriptionListDescription>{smtpPassword ? "●●●●●●" : "미입력"}</DescriptionListDescription>
-                        </DescriptionListGroup>
-                        <DescriptionListGroup>
-                          <DescriptionListTerm>수신 이메일 주소</DescriptionListTerm>
-                          <DescriptionListDescription>{smtpReceivers || "미입력"}</DescriptionListDescription>
+                          <DescriptionListDescription>{smtpEnabled ? smtpPassword ? "********" : "미입력" : "N/A"}</DescriptionListDescription>
                         </DescriptionListGroup>
                       </DescriptionList>
                     </div>
@@ -493,40 +572,45 @@ export default function MonitoringCenterWizardModal({
             </div>
           </WizardStep>
 
+          <WizardStep name="배포" id="monitoring-deploy">
+            <div className="ct-monitoring-center-wizard__content">
+              <Content component="p" className="ct-monitoring-center-wizard__deploy-title">
+                Wall 모니터링센터를 구성 중입니다. 전체 3단계 중 2단계 진행 중입니다.
+              </Content>
+              <div className="ct-monitoring-center-wizard__status-list">
+                <div>
+                  <Label color="green" variant="outline">완료</Label>
+                  <span>Wall 구성 HOST 네트워크 연결 테스트</span>
+                </div>
+                <div>
+                  <Label color={deployPhase === "running" ? "orange" : "blue"} variant="outline">
+                    {deployPhase === "running" ? "진행중" : "준비중"}
+                  </Label>
+                  {deployPhase === "running" && <Spinner size="sm" aria-label="진행중" />}
+                  <span>모니터링 대상 IP 설정</span>
+                </div>
+                {smtpEnabled && (
+                  <div>
+                    <Label color="blue" variant="outline">준비중</Label>
+                    <span>알림 SMTP 설정</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </WizardStep>
+
           <WizardStep name="완료" id="monitoring-finish">
             <div className="ct-monitoring-center-wizard__content">
-              {deployPhase === "running" ? (
-                <>
-                  <Content component="p" className="ct-monitoring-center-wizard__deploy-title">
-                    Wall 모니터링센터를 구성 중입니다. 전체 3단계 중 2단계 진행 중입니다.
+              <Content>
+                <Content component="p">Wall 모니터링센터 구성을 완료했습니다.</Content>
+                <Content component="ul">
+                  <Content component="li">
+                    Wall 모니터링센터를 통해 대시보드 서비스, 알람 서비스, 플레이리스트 등 작업을 수행할 수 있습니다.
                   </Content>
-                  <div className="ct-monitoring-center-wizard__status-list">
-                    <div>
-                      <Label color="green">완료됨</Label>
-                      <span>Wall 구성 HOST 네트워크 연결 테스트</span>
-                    </div>
-                    <div>
-                      <Label color="orange">진행중</Label>
-                      <span>모니터링 대상 IP 설정</span>
-                    </div>
-                    <div>
-                      <Label color="blue">준비중</Label>
-                      <span>알림 SMTP 설정</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <Content>
-                  <Content component="p">Wall 모니터링센터 구성을 완료했습니다.</Content>
-                  <Content component="ul">
-                    <Content component="li">
-                      Wall 모니터링센터를 통해 대시보드 서비스, 알람 서비스, 플레이리스트 등 작업을 수행할 수 있습니다.
-                    </Content>
-                    <Content component="li">관리자로 로그인 하신 후 보안을 위해 비밀번호를 변경해 주세요.</Content>
-                  </Content>
-                  <Content component="p">위의 모든 작업은 Wall 모니터링센터의 웹 관리콘솔을 이용해 진행합니다.</Content>
+                  <Content component="li">관리자로 로그인 하신 후 보안을 위해 비밀번호를 변경해 주세요.</Content>
                 </Content>
-              )}
+                <Content component="p">위의 모든 작업은 Wall 모니터링센터의 웹 관리콘솔을 이용해 진행합니다.</Content>
+              </Content>
             </div>
           </WizardStep>
         </Wizard>
@@ -537,25 +621,47 @@ export default function MonitoringCenterWizardModal({
         onClose={() => setConfirmOpen(false)}
         aria-label="모니터링센터 대시보드 구성 진행"
         variant="small"
-        title="모니터링센터 대시보드 구성 진행"
-        actions={[
-          <Button
-            key="confirm"
-            variant="primary"
-            onClick={() => {
-              setConfirmOpen(false);
-              nextStepRef.current?.();
-            }}
-          >
-            실행
-          </Button>,
-          <Button key="cancel" variant="link" onClick={() => setConfirmOpen(false)}>
-            아니요
-          </Button>,
-        ]}
       >
-        <Content component="p">모니터링센터 대시보드 구성을 진행하시겠습니까?</Content>
+        <ModalHeader title="모니터링센터 대시보드 구성 진행" />
+        <ModalBody>
+          <Content component="p">모니터링센터 대시보드 구성을 진행하시겠습니까?</Content>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={executeMockDeploy}>
+            실행
+          </Button>
+          <Button variant="link" onClick={() => setConfirmOpen(false)}>
+            아니요
+          </Button>
+        </ModalFooter>
       </Modal>
+
+      <Modal
+        isOpen={cancelConfirmOpen}
+        onClose={() => setCancelConfirmOpen(false)}
+        aria-label="Wall 모니터링센터 VM 구성 취소"
+        variant="small"
+      >
+        <ModalHeader title="Wall 모니터링센터 VM 구성 취소" />
+        <ModalBody>
+          <Content component="p">
+            Wall 모니터링센터 VM 구성을 취소하시겠습니까? 입력된 데이터는 초기화 됩니다.
+          </Content>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={handleClose}>
+            예
+          </Button>
+          <Button variant="link" onClick={() => setCancelConfirmOpen(false)}>
+            아니요
+          </Button>
+        </ModalFooter>
+      </Modal>
+      <ValidationErrorModal
+        isOpen={Boolean(validationMessage)}
+        message={validationMessage}
+        onClose={() => setValidationMessage("")}
+      />
     </>
   );
 }

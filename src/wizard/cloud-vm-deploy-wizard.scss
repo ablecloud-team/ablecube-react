@@ -64,6 +64,16 @@
   align-items: center;
 }
 
+.ct-cloud-vm-wizard__inline .pf-v6-c-radio {
+  margin: 0;
+}
+
+.ct-cloud-vm-wizard__stacked-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .ct-cloud-vm-wizard__form-horizontal .pf-v6-c-form__group {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
@@ -91,6 +101,7 @@
   border-collapse: collapse;
   font-size: 13px;
   table-layout: fixed;
+  --ct-cloud-vm-table-input-font-size: 12px;
 }
 
 .ct-cloud-vm-wizard__table th,
@@ -100,6 +111,26 @@
   text-align: center;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+.ct-cloud-vm-wizard__table th:first-child,
+.ct-cloud-vm-wizard__table td:first-child {
+  width: 52px;
+}
+
+.ct-cloud-vm-wizard__table .pf-v6-c-form-control {
+  --pf-v6-c-form-control--FontSize: var(--ct-cloud-vm-table-input-font-size);
+  font-size: var(--ct-cloud-vm-table-input-font-size) !important;
+}
+
+.ct-cloud-vm-wizard__table .pf-v6-c-form-control > input,
+.ct-cloud-vm-wizard__table .pf-v6-c-form-control__input,
+.ct-cloud-vm-wizard__table input {
+  min-width: 0;
+  padding-inline: 4px;
+  font-size: var(--ct-cloud-vm-table-input-font-size) !important;
+  text-align: center;
+  text-overflow: clip;
 }
 
 .ct-cloud-vm-wizard__info {
@@ -160,6 +191,27 @@
 .ct-cloud-vm-wizard__review-textarea {
   margin-top: 6px;
   color: #6a6e73;
+}
+
+.ct-cloud-vm-wizard__file-preview {
+  margin-top: 8px;
+}
+
+.ct-cloud-vm-wizard__failover-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ct-cloud-vm-wizard__field-group {
+  border-top: 1px solid #d2d2d2;
+  padding-top: 12px;
+}
+
+.ct-cloud-vm-wizard__field-group-title {
+  font-weight: 600;
+  margin-bottom: 10px;
 }
 
 .ct-cloud-vm-wizard__status-list {

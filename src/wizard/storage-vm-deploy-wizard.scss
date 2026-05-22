@@ -94,6 +94,7 @@
   border-collapse: collapse;
   font-size: 13px;
   table-layout: fixed;
+  --ct-storage-vm-table-input-font-size: 12px;
 }
 
 .ct-storage-vm-wizard__table th,
@@ -103,6 +104,37 @@
   text-align: center;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+.ct-storage-vm-wizard__table th:first-child,
+.ct-storage-vm-wizard__table td:first-child {
+  width: 52px;
+}
+
+.ct-storage-vm-wizard__table .pf-v6-c-form-control {
+  --pf-v6-c-form-control--FontSize: var(--ct-storage-vm-table-input-font-size);
+  font-size: var(--ct-storage-vm-table-input-font-size) !important;
+}
+
+.ct-storage-vm-wizard__table .pf-v6-c-form-control > input,
+.ct-storage-vm-wizard__table .pf-v6-c-form-control__input,
+.ct-storage-vm-wizard__table input {
+  min-width: 0;
+  padding-inline: 4px;
+  font-size: var(--ct-storage-vm-table-input-font-size) !important;
+  text-align: center;
+  text-overflow: clip;
+}
+
+.ct-storage-vm-wizard__disk-list,
+.ct-storage-vm-wizard__stacked-selects {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ct-storage-vm-wizard__disk-item {
+  padding: 4px 0;
 }
 
 .ct-storage-vm-wizard__inline-field {
@@ -173,6 +205,10 @@
 .ct-storage-vm-wizard__review-textarea {
   margin-top: 6px;
   color: #6a6e73;
+}
+
+.ct-storage-vm-wizard__file-preview {
+  margin-top: 8px;
 }
 
 .ct-storage-vm-wizard__status-list {

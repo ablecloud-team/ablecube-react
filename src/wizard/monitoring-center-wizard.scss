@@ -54,12 +54,13 @@
 }
 
 .ct-monitoring-center-wizard__section {
-  margin-top: 16px;
+  margin-top: 32px;
+  margin-left: 15px;
 }
 
 .ct-monitoring-center-wizard__form-horizontal .pf-v6-c-form__group {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: 165px minmax(0, 1fr);
   align-items: center;
   column-gap: 16px;
 }
@@ -69,15 +70,39 @@
 }
 
 .ct-monitoring-center-wizard__field-group {
-  margin-top: 16px;
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 24px;
   border-top: 1px solid #e0e0e0;
-  padding-top: 16px;
+  padding-top: 20px;
+}
+
+.ct-monitoring-center-wizard__field-group .pf-v6-c-form__group {
+  display: grid;
+  grid-template-columns: 165px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 16px;
+  padding: 0;
 }
 
 .ct-monitoring-center-wizard__field-title {
   font-weight: 600;
   color: #1f70ff;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
+}
+
+.ct-monitoring-center-wizard__host-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ct-monitoring-center-wizard__host-count-row .pf-v6-c-form__group-control {
+  max-width: 150px;
+}
+
+.ct-monitoring-center-wizard__ip-input {
+  width: min(70%, 720px);
 }
 
 .ct-monitoring-center-wizard__info {

@@ -1,6 +1,9 @@
 import React from "react";
 import {
   Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   Wizard,
   WizardStep,
   Title,
@@ -13,6 +16,7 @@ import {
   Checkbox,
   Alert,
   Label,
+  Spinner,
   DescriptionList,
   DescriptionListGroup,
   DescriptionListTerm,
@@ -20,7 +24,9 @@ import {
 } from "@patternfly/react-core";
 import { InfoCircleIcon, AngleRightIcon, ExclamationTriangleIcon } from "@patternfly/react-icons";
 
+import ValidationErrorModal from "../components/common/ValidationErrorModal";
 import "./gfs-storage-configure-wizard.scss";
+import { isIpv4 } from "./validation";
 
 type DeployPhase = "idle" | "running" | "done";
 type ExternalSyncMode = "duplication" | "single" | "skip";
@@ -67,6 +73,9 @@ export default function GfsStorageConfigureWizardModal({
     ipmi: true,
   });
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = React.useState(false);
+  const [validationMessage, setValidationMessage] = React.useState("");
+  const [externalSyncCompleted, setExternalSyncCompleted] = React.useState(false);
   const [deployPhase, setDeployPhase] = React.useState<DeployPhase>("idle");
   const [disableNav, setDisableNav] = React.useState(false);
 
@@ -81,6 +90,9 @@ export default function GfsStorageConfigureWizardModal({
     setIpmiHosts(DEFAULT_HOSTS);
     setReviewOpen({ external: true, disk: true, ipmi: true });
     setConfirmOpen(false);
+    setCancelConfirmOpen(false);
+    setValidationMessage("");
+    setExternalSyncCompleted(false);
     setDeployPhase("idle");
     setDisableNav(false);
   }, []);
@@ -90,12 +102,72 @@ export default function GfsStorageConfigureWizardModal({
     resetState();
   };
 
+  const requestClose = () => {
+    setCancelConfirmOpen(true);
+  };
+
   const externalSyncLabel =
     externalSyncMode === "duplication"
       ? "이중화"
       : externalSyncMode === "single"
         ? "단중화"
         : "건너뛰기";
+
+  const updateIpmiHost = (index: number, patch: Partial<MonitoringHostIpmi>) => {
+    setIpmiHosts((prev) => prev.map((host, hostIndex) => (
+      hostIndex === index ? { ...host, ...patch } : host
+    )));
+  };
+
+  const validateGfsStorage = () => {
+    if (!externalSyncMode) {
+      return "외부 스토리지 동기화 여부를 선택해주세요.";
+    }
+
+    if (selectedDisks.length === 0) {
+      return "GFS 디스크를 선택해주세요.";
+    }
+
+    const missingIpmi = ipmiHosts.find((host) => !host.ip.trim());
+    if (missingIpmi) {
+      return `${missingIpmi.hostName} IPMI IP를 입력해주세요.`;
+    }
+
+    const invalidIpmi = ipmiHosts.find((host) => !isIpv4(host.ip));
+    if (invalidIpmi) {
+      return `${invalidIpmi.hostName} IPMI IP 형식을 확인해주세요.`;
+    }
+
+    if (ipmiMode === "common") {
+      if (!ipmiCommonUser.trim()) return "IPMI 아이디를 입력해주세요.";
+      if (!ipmiCommonPass.trim()) return "IPMI 비밀번호를 입력해주세요.";
+      return "";
+    }
+
+    const missingCredential = ipmiHosts.find((host) => !host.username.trim() || !host.password.trim());
+    if (missingCredential) {
+      return `${missingCredential.hostName} IPMI 아이디와 비밀번호를 입력해주세요.`;
+    }
+
+    return "";
+  };
+
+  const startDeploy = () => {
+    const message = validateGfsStorage();
+    if (message) {
+      setValidationMessage(message);
+      setConfirmOpen(false);
+      return;
+    }
+
+    setValidationMessage("");
+    setConfirmOpen(false);
+    setDeployPhase("running");
+    setDisableNav(true);
+    nextStepRef.current?.();
+  };
+
+  const diskLabel = (diskId: string) => DEFAULT_DISKS.find((disk) => disk.id === diskId)?.label || diskId;
 
   const wizardFooter = (
     activeStep: any,
@@ -107,7 +179,10 @@ export default function GfsStorageConfigureWizardModal({
     const stepId = String(activeStep.id);
     const isFirst = stepId === "gfs-overview";
     const isReview = stepId === "gfs-review";
+    const isDeploy = stepId === "gfs-deploy";
     const isFinish = stepId === "gfs-finish";
+    const isExternalSync = stepId === "gfs-external-storage-sync";
+    const isExternalSyncRequired = isExternalSync && externalSyncMode === "duplication" && !externalSyncCompleted;
 
     if (isReview) {
       nextStepRef.current = goToNextStep;
@@ -118,12 +193,16 @@ export default function GfsStorageConfigureWizardModal({
         setConfirmOpen(true);
         return;
       }
-      if (isFinish) {
+      if (isDeploy) {
         if (deployPhase === "running") {
           setDeployPhase("done");
           setDisableNav(false);
           return;
         }
+        goToNextStep();
+        return;
+      }
+      if (isFinish) {
         close();
         return;
       }
@@ -132,24 +211,26 @@ export default function GfsStorageConfigureWizardModal({
 
     const primaryLabel = isReview
       ? "배포"
-      : isFinish
+      : isDeploy
         ? deployPhase === "running"
           ? "완료"
-          : "닫기"
+          : "다음"
+      : isFinish
+        ? "닫기"
         : "다음";
 
     return (
       <div className="ct-gfs-storage-wizard__footer">
-        <Button variant="primary" onClick={handlePrimary}>
+        <Button variant="primary" onClick={handlePrimary} isDisabled={isExternalSyncRequired}>
           {primaryLabel}
         </Button>
-        {!isFirst && !isFinish && (
+        {!isFirst && !isDeploy && !isFinish && (
           <Button variant="secondary" onClick={goToPrevStep}>
             이전
           </Button>
         )}
-        {!isFinish && (
-          <Button variant="link" onClick={close}>
+        {!isDeploy && !isFinish && (
+          <Button variant="link" onClick={requestClose}>
             취소
           </Button>
         )}
@@ -167,9 +248,8 @@ export default function GfsStorageConfigureWizardModal({
         className="ct-gfs-storage-wizard__modal"
       >
         <Wizard
-          onClose={handleClose}
+          onClose={requestClose}
           onSave={handleClose}
-          height="74vh"
           width="100%"
           navAriaLabel="GFS 스토리지 구성 단계"
           className={
@@ -181,11 +261,8 @@ export default function GfsStorageConfigureWizardModal({
           navProps={{ "aria-disabled": disableNav }}
           onStepChange={(_event, currentStep) => {
             const stepId = String(currentStep.id);
-            if (stepId === "gfs-finish" && deployPhase === "idle") {
-              setDeployPhase("running");
-            }
-            if (stepId === "gfs-finish") {
-              setDisableNav(deployPhase !== "done");
+            if (stepId === "gfs-deploy") {
+              setDisableNav(true);
               return;
             }
             setDisableNav(false);
@@ -206,7 +283,7 @@ export default function GfsStorageConfigureWizardModal({
                 type="button"
                 className="ct-gfs-storage-wizard__close"
                 aria-label="Close"
-                onClick={handleClose}
+                onClick={requestClose}
               >
                 ×
               </button>
@@ -250,31 +327,51 @@ export default function GfsStorageConfigureWizardModal({
                       name="gfs-external-sync"
                       label="이중화"
                       isChecked={externalSyncMode === "duplication"}
-                      onChange={() => setExternalSyncMode("duplication")}
+                      onChange={() => {
+                        setExternalSyncMode("duplication");
+                        setExternalSyncCompleted(false);
+                      }}
                     />
                     <Radio
                       id="gfs-external-single"
                       name="gfs-external-sync"
                       label="단중화"
                       isChecked={externalSyncMode === "single"}
-                      onChange={() => setExternalSyncMode("single")}
+                      onChange={() => {
+                        setExternalSyncMode("single");
+                        setExternalSyncCompleted(false);
+                      }}
                     />
                     <Radio
                       id="gfs-external-skip"
                       name="gfs-external-sync"
                       label="건너뛰기"
                       isChecked={externalSyncMode === "skip"}
-                      onChange={() => setExternalSyncMode("skip")}
+                      onChange={() => {
+                        setExternalSyncMode("skip");
+                        setExternalSyncCompleted(false);
+                      }}
                     />
                     <div className="ct-gfs-storage-wizard__helper-text">
-                      이중화 옵션 선택 시 동기화 완료 후 다음 단계로 진행해 주세요.
+                      이중화 옵션 선택 시 외부 스토리지 동기화를 완료한 후 다음 단계로 진행해 주세요.
                     </div>
                   </div>
                 </FormGroup>
                 <FormGroup label="외부 스토리지 동기화" fieldId="gfs-external-sync-action">
-                  <Button variant="secondary" isDisabled={externalSyncMode === "skip"}>
-                    외부 스토리지 동기화 활성화
-                  </Button>
+                  <div className="ct-gfs-storage-wizard__external-sync-action">
+                    <Button
+                      variant="secondary"
+                      isDisabled={externalSyncMode !== "duplication"}
+                      onClick={() => setExternalSyncCompleted(true)}
+                    >
+                      외부 스토리지 동기화 활성화
+                    </Button>
+                    {externalSyncMode === "duplication" && (
+                      <Label color={externalSyncCompleted ? "green" : "orange"}>
+                        {externalSyncCompleted ? "동기화 완료" : "동기화 필요"}
+                      </Label>
+                    )}
+                  </div>
                 </FormGroup>
               </Form>
               <Alert
@@ -296,7 +393,11 @@ export default function GfsStorageConfigureWizardModal({
             </div>
           </WizardStep>
 
-          <WizardStep name="GFS 디스크 구성" id="gfs-disk-configure">
+          <WizardStep
+            name="GFS 디스크 구성"
+            id="gfs-disk-configure"
+            isDisabled={externalSyncMode === "duplication" && !externalSyncCompleted}
+          >
             <div className="ct-gfs-storage-wizard__content">
               <Content component="p">
                 GFS용 디스크로 관리할 "클러스터에 연결된 iSCSI 또는 FC 디스크"를 선택해야 합니다.
@@ -338,7 +439,11 @@ export default function GfsStorageConfigureWizardModal({
             </div>
           </WizardStep>
 
-          <WizardStep name="IPMI 정보" id="gfs-ipmi">
+          <WizardStep
+            name="IPMI 정보"
+            id="gfs-ipmi"
+            isDisabled={externalSyncMode === "duplication" && !externalSyncCompleted}
+          >
             <div className="ct-gfs-storage-wizard__content">
               <Content component="p">
                 클러스터를 구성하기 위한 각 호스트의 IPMI 정보를 설정합니다. 아래의 항목에 값을 입력하십시오.
@@ -391,13 +496,8 @@ export default function GfsStorageConfigureWizardModal({
                       <TextInput
                         id={`gfs-ipmi-common-ip-${index}`}
                         value={host.ip}
-                        onChange={(_event, value) => {
-                          setIpmiHosts((prev) => {
-                            const next = [...prev];
-                            next[index] = { ...next[index], ip: String(value) };
-                            return next;
-                          });
-                        }}
+                        placeholder="xxx.xxx.xxx.xxx 형식으로 입력"
+                        onChange={(_event, value) => updateIpmiHost(index, { ip: String(value) })}
                       />
                     </FormGroup>
                   ))}
@@ -410,26 +510,16 @@ export default function GfsStorageConfigureWizardModal({
                         <TextInput
                           id={`gfs-ipmi-ip-${index}`}
                           value={host.ip}
-                          onChange={(_event, value) => {
-                            setIpmiHosts((prev) => {
-                              const next = [...prev];
-                              next[index] = { ...next[index], ip: String(value) };
-                              return next;
-                            });
-                          }}
+                          placeholder="xxx.xxx.xxx.xxx 형식으로 입력"
+                          onChange={(_event, value) => updateIpmiHost(index, { ip: String(value) })}
                         />
                       </FormGroup>
                       <FormGroup label={`${host.hostName} 사용자`} isRequired fieldId={`gfs-ipmi-user-${index}`}>
                         <TextInput
                           id={`gfs-ipmi-user-${index}`}
                           value={host.username}
-                          onChange={(_event, value) => {
-                            setIpmiHosts((prev) => {
-                              const next = [...prev];
-                              next[index] = { ...next[index], username: String(value) };
-                              return next;
-                            });
-                          }}
+                          placeholder="아이디를 입력하세요."
+                          onChange={(_event, value) => updateIpmiHost(index, { username: String(value) })}
                         />
                       </FormGroup>
                       <FormGroup label={`${host.hostName} 비밀번호`} isRequired fieldId={`gfs-ipmi-pass-${index}`}>
@@ -437,13 +527,8 @@ export default function GfsStorageConfigureWizardModal({
                           id={`gfs-ipmi-pass-${index}`}
                           type="password"
                           value={host.password}
-                          onChange={(_event, value) => {
-                            setIpmiHosts((prev) => {
-                              const next = [...prev];
-                              next[index] = { ...next[index], password: String(value) };
-                              return next;
-                            });
-                          }}
+                          placeholder="비밀번호를 입력하세요."
+                          onChange={(_event, value) => updateIpmiHost(index, { password: String(value) })}
                         />
                       </FormGroup>
                     </React.Fragment>
@@ -453,7 +538,11 @@ export default function GfsStorageConfigureWizardModal({
             </div>
           </WizardStep>
 
-          <WizardStep name="설정확인" id="gfs-review">
+          <WizardStep
+            name="설정확인"
+            id="gfs-review"
+            isDisabled={externalSyncMode === "duplication" && !externalSyncCompleted}
+          >
             <div className="ct-gfs-storage-wizard__content">
               <Content>
                 <Content component="p">
@@ -506,7 +595,7 @@ export default function GfsStorageConfigureWizardModal({
                             {selectedDisks.length === 0
                               ? "미선택"
                               : selectedDisks
-                                  .map((diskId) => DEFAULT_DISKS.find((disk) => disk.id === diskId)?.label || diskId)
+                                  .map((diskId) => diskLabel(diskId))
                                   .join(", ")}
                           </DescriptionListDescription>
                         </DescriptionListGroup>
@@ -563,50 +652,53 @@ export default function GfsStorageConfigureWizardModal({
             </div>
           </WizardStep>
 
+          <WizardStep name="배포" id="gfs-deploy">
+            <div className="ct-gfs-storage-wizard__content">
+              <Content component="p" className="ct-gfs-storage-wizard__deploy-title">
+                GFS 스토리지를 구성 중입니다. 전체 3단계 중 {deployPhase === "done" ? "3" : "2"}단계 진행 중입니다.
+              </Content>
+              <div className="ct-gfs-storage-wizard__status-list">
+                <div>
+                  <Label color="green">완료됨</Label>
+                  <span>클러스터 구성 HOST 간 연결 상태 확인</span>
+                </div>
+                <div>
+                  <Label color={deployPhase === "done" ? "green" : "orange"}>
+                    {deployPhase === "done" ? "완료됨" : "진행중"}
+                  </Label>
+                  {deployPhase === "running" && <Spinner size="sm" />}
+                  <span>클러스터 구성 설정 초기화 작업</span>
+                </div>
+                <div>
+                  <Label color={deployPhase === "done" ? "green" : "blue"}>
+                    {deployPhase === "done" ? "완료됨" : "준비중"}
+                  </Label>
+                  <span>GFS 구성 설정 및 PCS 구성 설정</span>
+                </div>
+              </div>
+            </div>
+          </WizardStep>
+
           <WizardStep name="완료" id="gfs-finish">
             <div className="ct-gfs-storage-wizard__content">
-              {deployPhase === "running" ? (
-                <>
-                  <Content component="p" className="ct-gfs-storage-wizard__deploy-title">
-                    GFS 스토리지를 구성 중입니다. 전체 3단계 중 2단계 진행 중입니다.
-                  </Content>
-                  <div className="ct-gfs-storage-wizard__status-list">
-                    <div>
-                      <Label color="green">완료됨</Label>
-                      <span>클러스터 구성 HOST 간 연결 상태 확인</span>
-                    </div>
-                    <div>
-                      <Label color="orange">진행중</Label>
-                      <span>클러스터 구성 설정 초기화 작업</span>
-                    </div>
-                    <div>
-                      <Label color="blue">준비중</Label>
-                      <span>GFS 구성 설정 및 PCS 구성 설정</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Content component="p">
-                    GFS 스토리지 구성을 완료하였습니다. 아래 내용을 참고하여 GFS 디스크와 PCS가 정상적으로 설정되어 작동하는지
-                    확인한 후, 다음 단계로 진행하시기 바랍니다.
-                  </Content>
-                  <Content component="p" className="ct-gfs-storage-wizard__section">
-                    모든 호스트에 GFS 구성이 완료 되었는지 확인합니다.
-                    <br />
-                    확인 명령어: <code>lsblk</code>, <code>lvs</code>, <code>vgs</code>, <code>pvs</code>
-                  </Content>
-                  <Content component="p">
-                    선택한 하나의 호스트에서 PCS 설정이 올바르게 완료되었는지 확인합니다.
-                    <br />
-                    확인 명령어: <code>pcs status</code>
-                  </Content>
-                  <Content component="p" className="ct-gfs-storage-wizard__section">
-                    확인 결과 이상이 없다면, 클라우드센터 VM 배포를 진행해 주세요. 마법사를 종료하려면 화면 상단의 닫기 버튼을
-                    클릭하십시오.
-                  </Content>
-                </>
-              )}
+              <Content component="p">
+                GFS 스토리지 구성을 완료하였습니다. 아래 내용을 참고하여 GFS 디스크와 PCS가 정상적으로 설정되어 작동하는지
+                확인한 후, 다음 단계로 진행하시기 바랍니다.
+              </Content>
+              <Content component="p" className="ct-gfs-storage-wizard__section">
+                모든 호스트에 GFS 구성이 완료 되었는지 확인합니다.
+                <br />
+                확인 명령어: <code>lsblk</code>, <code>lvs</code>, <code>vgs</code>, <code>pvs</code>
+              </Content>
+              <Content component="p">
+                선택한 하나의 호스트에서 PCS 설정이 올바르게 완료되었는지 확인합니다.
+                <br />
+                확인 명령어: <code>pcs status</code>
+              </Content>
+              <Content component="p" className="ct-gfs-storage-wizard__section">
+                확인 결과 이상이 없다면, 클라우드센터 VM 배포를 진행해 주세요. 마법사를 종료하려면 화면 상단의 닫기 버튼을
+                클릭하십시오.
+              </Content>
             </div>
           </WizardStep>
         </Wizard>
@@ -617,25 +709,47 @@ export default function GfsStorageConfigureWizardModal({
         onClose={() => setConfirmOpen(false)}
         aria-label="GFS 스토리지 구성 진행"
         variant="small"
-        title="GFS 스토리지 구성 진행"
-        actions={[
-          <Button
-            key="confirm"
-            variant="primary"
-            onClick={() => {
-              setConfirmOpen(false);
-              nextStepRef.current?.();
-            }}
-          >
-            실행
-          </Button>,
-          <Button key="cancel" variant="link" onClick={() => setConfirmOpen(false)}>
-            아니요
-          </Button>,
-        ]}
       >
-        <Content component="p">GFS 스토리지 구성을 진행하시겠습니까?</Content>
+        <ModalHeader title="GFS 스토리지 구성 진행" />
+        <ModalBody>
+          <Content component="p">GFS 스토리지 구성을 진행하시겠습니까?</Content>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={startDeploy}>
+            실행
+          </Button>
+          <Button variant="link" onClick={() => setConfirmOpen(false)}>
+            아니요
+          </Button>
+        </ModalFooter>
       </Modal>
+
+      <Modal
+        isOpen={cancelConfirmOpen}
+        onClose={() => setCancelConfirmOpen(false)}
+        aria-label="GFS 스토리지 구성 취소"
+        variant="small"
+      >
+        <ModalHeader title="GFS 스토리지 구성 취소" />
+        <ModalBody>
+          <Content component="p">
+            GFS 스토리지 구성을 취소하시겠습니까? 입력된 데이터는 초기화 됩니다.
+          </Content>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={handleClose}>
+            실행
+          </Button>
+          <Button variant="link" onClick={() => setCancelConfirmOpen(false)}>
+            아니요
+          </Button>
+        </ModalFooter>
+      </Modal>
+      <ValidationErrorModal
+        isOpen={Boolean(validationMessage)}
+        message={validationMessage}
+        onClose={() => setValidationMessage("")}
+      />
     </>
   );
 }

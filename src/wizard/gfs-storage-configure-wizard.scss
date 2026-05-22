@@ -169,6 +169,13 @@
   font-size: 12px;
 }
 
+.ct-gfs-storage-wizard__external-sync-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .ct-gfs-chevron {
   transition: transform 0.2s ease;
   display: inline-flex;

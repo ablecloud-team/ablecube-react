@@ -27,6 +27,8 @@ import {
 } from "@patternfly/react-icons";
 
 import cockpit from "cockpit";
+import ConfirmActionModal from "../components/common/ConfirmActionModal";
+import VmResourceUpdateModal from "../components/common/VmResourceUpdateModal";
 import "./status-card.scss";
 
 const VM_STATUS_META = {
@@ -63,9 +65,35 @@ const FALLBACK_DATA = {
   storageReplicationNicIp: "N/A"
 };
 
+type StorageVmAction = "start" | "stop" | "delete" | "connect";
+
+const STORAGE_VM_ACTIONS: Record<StorageVmAction, { title: string; message: string; confirmLabel?: string }> = {
+  start: {
+    title: "스토리지 센터 가상머신 상태 변경",
+    message: "스토리지 센터 가상머신을 '시작' 하시겠습니까?",
+    confirmLabel: "시작",
+  },
+  stop: {
+    title: "스토리지 센터 가상머신 상태 변경",
+    message: "스토리지 센터 가상머신을 '정지' 하시겠습니까?",
+    confirmLabel: "정지",
+  },
+  delete: {
+    title: "스토리지 센터 가상머신 상태 변경",
+    message: "스토리지 센터 가상머신을 '삭제' 하시겠습니까?",
+    confirmLabel: "삭제",
+  },
+  connect: {
+    title: "스토리지센터VM 연결",
+    message: "스토리지센터VM 관리 화면으로 연결하시겠습니까?",
+    confirmLabel: "연결",
+  },
+};
+
 export default function StorageVmStatus() {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [isMaintenance, setIsMaintenance] = React.useState(false);
+  const [confirmAction, setConfirmAction] = React.useState<StorageVmAction | null>(null);
+  const [isResourceUpdateModalOpen, setIsResourceUpdateModalOpen] = React.useState(false);
 
   const [data, setData] = React.useState({
     vmStatus: "",
@@ -108,8 +136,42 @@ export default function StorageVmStatus() {
     ? "스토리지센터 가상머신이 배포되었습니다."
     : "스토리지센터 가상머신이 배포되지 않았습니다.";
   const footerColor = isClusterError ? "#c9190b" : "#3e8635";
+  const isVmRunning = data.vmStatus === "running";
+  const isVmStopped = data.vmStatus === "shutOff";
+  const currentConfirmAction = confirmAction ? STORAGE_VM_ACTIONS[confirmAction] : null;
 
   const onSelect = () => setIsOpen(false);
+
+  const openConfirmActionModal = (action: StorageVmAction) => {
+    setConfirmAction(action);
+    setIsOpen(false);
+  };
+
+  const closeConfirmActionModal = () => {
+    setConfirmAction(null);
+  };
+
+  const confirmStorageVmAction = () => {
+    if (!confirmAction) return;
+    // TODO: 백엔드 API 전환 후 storage-vm-status-update.py start/stop/delete 또는 create_address.py 호출로 연결합니다.
+    console.log("storage vm action", confirmAction);
+    setConfirmAction(null);
+  };
+
+  const openResourceUpdateModal = () => {
+    setIsResourceUpdateModalOpen(true);
+    setIsOpen(false);
+  };
+
+  const closeResourceUpdateModal = () => {
+    setIsResourceUpdateModalOpen(false);
+  };
+
+  const confirmResourceUpdate = (cpu: string, memory: string) => {
+    // TODO: 백엔드 API 전환 후 storage-vm-resource-update.py에 해당하는 자원변경 API로 연결합니다.
+    console.log("storage vm resource update", cpu, memory);
+    setIsResourceUpdateModalOpen(false);
+  };
 
   return (
     <Card className="ct-status-card">
@@ -121,6 +183,7 @@ export default function StorageVmStatus() {
               isOpen={isOpen}
               onSelect={onSelect}
               onOpenChange={setIsOpen}
+              popperProps={{ placement: "bottom-end", preventOverflow: true }}
               toggle={(toggleRef) => (
                 <MenuToggle
                   ref={toggleRef}
@@ -134,23 +197,34 @@ export default function StorageVmStatus() {
             >
               <DropdownList>
                 <DropdownItem
-                  isDisabled={isMaintenance}
-                  onClick={() => {
-                    setIsMaintenance(true);
-                    setIsOpen(false);
-                  }}
+                  isDisabled={!isVmStopped}
+                  onClick={() => openConfirmActionModal("start")}
                 >
-                  유지보수 모드 설정
+                  스토리지센터VM 시작
                 </DropdownItem>
-
                 <DropdownItem
-                  isDisabled={!isMaintenance}
-                  onClick={() => {
-                    setIsMaintenance(false);
-                    setIsOpen(false);
-                  }}
+                  isDisabled={!isVmRunning}
+                  onClick={() => openConfirmActionModal("stop")}
                 >
-                  유지보수 모드 해제
+                  스토리지센터VM 정지
+                </DropdownItem>
+                <DropdownItem
+                  isDisabled={isVmRunning}
+                  onClick={() => openConfirmActionModal("delete")}
+                >
+                  스토리지센터VM 삭제
+                </DropdownItem>
+                <DropdownItem
+                  isDisabled={isVmRunning}
+                  onClick={openResourceUpdateModal}
+                >
+                  스토리지센터VM 자원변경
+                </DropdownItem>
+                <DropdownItem
+                  isDisabled={!isVmRunning}
+                  onClick={() => openConfirmActionModal("connect")}
+                >
+                  스토리지센터VM 연결
                 </DropdownItem>
               </DropdownList>
             </Dropdown>
@@ -233,6 +307,24 @@ export default function StorageVmStatus() {
       <CardFooter className="ct-status-card__footer" style={{ color: footerColor }}>
         {footerMessage}
       </CardFooter>
+
+      {currentConfirmAction && (
+        <ConfirmActionModal
+          isOpen={confirmAction !== null}
+          title={currentConfirmAction.title}
+          message={currentConfirmAction.message}
+          confirmLabel={currentConfirmAction.confirmLabel}
+          onClose={closeConfirmActionModal}
+          onConfirm={confirmStorageVmAction}
+        />
+      )}
+
+      <VmResourceUpdateModal
+        isOpen={isResourceUpdateModalOpen}
+        title="스토리지센터 가상머신 자원변경"
+        onClose={closeResourceUpdateModal}
+        onConfirm={confirmResourceUpdate}
+      />
     </Card>
   );
 }

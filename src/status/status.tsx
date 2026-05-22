@@ -18,6 +18,8 @@ import StorageVmDeployWizardModal from "../wizard/storage-vm-deploy-wizard";
 import CloudVmDeployWizardModal from "../wizard/cloud-vm-deploy-wizard";
 import MonitoringCenterWizardModal from "../wizard/monitoring-center-wizard";
 import GfsStorageConfigureWizardModal from "../wizard/gfs-storage-configure-wizard";
+import ConfigFileDownloadModal from "./config-file-download-modal";
+import LicenseManagementModal from "./license-management-modal";
 
 import "./status.scss";
 
@@ -27,6 +29,8 @@ export default function StatusPage() {
   const [isCloudVmWizardOpen, setIsCloudVmWizardOpen] = React.useState(false);
   const [isMonitoringWizardOpen, setIsMonitoringWizardOpen] = React.useState(false);
   const [isGfsWizardOpen, setIsGfsWizardOpen] = React.useState(false);
+  const [isConfigFileDownloadOpen, setIsConfigFileDownloadOpen] = React.useState(false);
+  const [isLicenseManagementOpen, setIsLicenseManagementOpen] = React.useState(false);
 
   return (
     <>
@@ -81,10 +85,16 @@ export default function StatusPage() {
         <Button variant={ButtonVariant.secondary}>
           모니터링센터 대시보드 연결
         </Button>
-        <Button variant={ButtonVariant.secondary}>
+        <Button
+          variant={ButtonVariant.secondary}
+          onClick={() => setIsConfigFileDownloadOpen(true)}
+        >
           설정파일 다운로드
         </Button>
-        <Button variant={ButtonVariant.secondary}>
+        <Button
+          variant={ButtonVariant.secondary}
+          onClick={() => setIsLicenseManagementOpen(true)}
+        >
           라이센스 관리
         </Button>
       </PageSection>
@@ -112,6 +122,16 @@ export default function StatusPage() {
       <GfsStorageConfigureWizardModal
         isOpen={isGfsWizardOpen}
         onClose={() => setIsGfsWizardOpen(false)}
+      />
+
+      <ConfigFileDownloadModal
+        isOpen={isConfigFileDownloadOpen}
+        onClose={() => setIsConfigFileDownloadOpen(false)}
+      />
+
+      <LicenseManagementModal
+        isOpen={isLicenseManagementOpen}
+        onClose={() => setIsLicenseManagementOpen(false)}
       />
 
       {/* 상단 카드 (Health, Usage) */}
