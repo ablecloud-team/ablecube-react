@@ -274,7 +274,6 @@ export default function MonitoringCenterWizardModal({
               : "ct-monitoring-center-wizard"
           }
           footer={wizardFooter}
-          navProps={{ "aria-disabled": disableNav }}
           onStepChange={(_event, currentStep) => {
             const stepId = String(currentStep.id);
             setDisableNav(stepId === "monitoring-deploy");

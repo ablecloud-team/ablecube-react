@@ -258,7 +258,6 @@ export default function GfsStorageConfigureWizardModal({
               : "ct-gfs-storage-wizard"
           }
           footer={wizardFooter}
-          navProps={{ "aria-disabled": disableNav }}
           onStepChange={(_event, currentStep) => {
             const stepId = String(currentStep.id);
             if (stepId === "gfs-deploy") {

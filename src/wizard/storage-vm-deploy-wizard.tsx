@@ -488,7 +488,6 @@ export default function StorageVmDeployWizardModal({
         navAriaLabel="스토리지센터 가상머신 배포 단계"
         className={disableNav ? "ct-storage-vm-wizard ct-storage-vm-wizard--nav-locked" : "ct-storage-vm-wizard"}
         footer={wizardFooter}
-        navProps={{ "aria-disabled": disableNav }}
         onStepChange={(_event, currentStep) => {
           const stepId = String(currentStep.id);
           setDisableNav(stepId === "storage-vm-finish");
@@ -572,7 +571,7 @@ export default function StorageVmDeployWizardModal({
                     </FormSelect>
                   </FormGroup>
                   <FormGroup label="ROOT Disk" fieldId="storage-vm-root-disk">
-                    <TextInput id="storage-vm-root-disk" value={ROOT_DISK} isReadOnly />
+                    <TextInput id="storage-vm-root-disk" value={ROOT_DISK} readOnly />
                   </FormGroup>
                 </Form>
                 <Alert
@@ -827,7 +826,7 @@ export default function StorageVmDeployWizardModal({
                 </div>
               </FormGroup>
               <FormGroup label="현재 호스트명" isRequired fieldId="storage-vm-current-hostname">
-                <TextInput id="storage-vm-current-hostname" value={currentHostname} isReadOnly />
+                <TextInput id="storage-vm-current-hostname" value={currentHostname} readOnly />
               </FormGroup>
               <FormGroup label="구성할 호스트 수" isRequired fieldId="storage-vm-host-count">
                 <div className="ct-storage-vm-wizard__stepper">
@@ -1000,6 +999,7 @@ export default function StorageVmDeployWizardModal({
                   hideDefaultPreview
                 />
                 <TextArea
+                  aria-label="SSH 개인 Key 미리보기"
                   className="ct-storage-vm-wizard__file-preview"
                   value={sshPrivateKey || "현재 호스트 SSH 개인 Key 파일을 자동으로 사용합니다."}
                   rows={4}
@@ -1017,6 +1017,7 @@ export default function StorageVmDeployWizardModal({
                   hideDefaultPreview
                 />
                 <TextArea
+                  aria-label="SSH 공개 Key 미리보기"
                   className="ct-storage-vm-wizard__file-preview"
                   value={sshPublicKey || "현재 호스트 SSH 공개 Key 파일을 자동으로 사용합니다."}
                   rows={3}
@@ -1120,6 +1121,7 @@ export default function StorageVmDeployWizardModal({
 	                        <DescriptionListTerm>클러스터 구성 프로파일</DescriptionListTerm>
 	                        <DescriptionListDescription>
                           <TextArea
+                            aria-label="클러스터 구성 프로파일 미리보기"
                             readOnly
                             value={buildHostsPreview()}
                             rows={6}
@@ -1174,6 +1176,7 @@ export default function StorageVmDeployWizardModal({
 	                        <DescriptionListTerm>SSH 개인 Key 파일</DescriptionListTerm>
 	                        <DescriptionListDescription>
 	                          <TextArea
+	                            aria-label="SSH 개인 Key 설정 확인"
 	                            readOnly
 	                            value={sshPrivateKey || sshPrivateFilename || "현재 호스트 id_rsa 자동 사용"}
 	                            rows={5}
@@ -1185,6 +1188,7 @@ export default function StorageVmDeployWizardModal({
 	                        <DescriptionListTerm>SSH 공개 Key 파일</DescriptionListTerm>
 	                        <DescriptionListDescription>
 	                          <TextArea
+	                            aria-label="SSH 공개 Key 설정 확인"
 	                            readOnly
 	                            value={sshPublicKey || sshPublicFilename || "현재 호스트 id_rsa.pub 자동 사용"}
 	                            rows={4}

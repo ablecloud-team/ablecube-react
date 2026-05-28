@@ -1029,6 +1029,7 @@ export default function ClusterConfigPrepareWizardModal({
                         <DescriptionListTerm>Private Key 내용</DescriptionListTerm>
                         <DescriptionListDescription>
                           <TextArea
+                            aria-label="SSH 개인 Key 설정 확인"
                             readOnly
                             value={sshPrivateText || (sshKeyMode === "new" ? "신규 SSH 개인 키는 구성 실행 시 생성됩니다." : sshPrivateFilename)}
                             rows={6}
@@ -1040,6 +1041,7 @@ export default function ClusterConfigPrepareWizardModal({
                         <DescriptionListTerm>Public Key 내용</DescriptionListTerm>
                         <DescriptionListDescription>
                           <TextArea
+                            aria-label="SSH 공개 Key 설정 확인"
                             readOnly
                             value={sshPublicText || (sshKeyMode === "new" ? "신규 SSH 공개 키는 구성 실행 시 생성됩니다." : sshPublicFilename)}
                             rows={6}
@@ -1084,6 +1086,7 @@ export default function ClusterConfigPrepareWizardModal({
                         <DescriptionListTerm>클러스터 구성 프로파일</DescriptionListTerm>
                         <DescriptionListDescription>
                           <TextArea
+                            aria-label="클러스터 구성 프로파일 미리보기"
                             readOnly
                             value={buildHostsPreview()}
                             rows={6}
@@ -1143,6 +1146,7 @@ export default function ClusterConfigPrepareWizardModal({
                         <DescriptionListTerm>cluster.json 미리보기</DescriptionListTerm>
                         <DescriptionListDescription>
                           <TextArea
+                            aria-label="cluster.json 미리보기"
                             readOnly
                             value={buildClusterJsonPreview()}
                             rows={8}
