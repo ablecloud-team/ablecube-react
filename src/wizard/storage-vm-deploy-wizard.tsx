@@ -72,85 +72,64 @@ interface StorageVmDeployWizardModalProps {
 
 const DEFAULT_HOSTS: ClusterHostRow[] = [
   {
-    hostName: "ablecube21",
-    hostIp: "10.10.2.1",
-    scvmMgmtIp: "10.10.2.11",
-    hostPnIp: "100.100.2.1",
-    scvmPnIp: "100.100.2.11",
-    scvmCnIp: "100.200.2.11",
-  },
-  {
-    hostName: "ablecube22",
-    hostIp: "10.10.2.2",
-    scvmMgmtIp: "10.10.2.12",
-    hostPnIp: "100.100.2.2",
-    scvmPnIp: "100.100.2.12",
-    scvmCnIp: "100.200.2.12",
-  },
-  {
-    hostName: "ablecube23",
-    hostIp: "10.10.2.3",
-    scvmMgmtIp: "10.10.2.13",
-    hostPnIp: "100.100.2.3",
-    scvmPnIp: "100.100.2.13",
-    scvmCnIp: "100.200.2.13",
+    hostName: "",
+    hostIp: "",
+    scvmMgmtIp: "",
+    hostPnIp: "",
+    scvmPnIp: "",
+    scvmCnIp: "",
   },
 ];
 
 const ROOT_DISK = "150 GiB (THIN Provisioning)";
 
 const RAID_DISKS: DiskOption[] = [
-  { id: "raid-1", value: "0000:5e:00.0", label: "0000:5e:00.0 Broadcom MegaRAID SAS-3 Controller" },
-  { id: "raid-2", value: "0000:af:00.0", label: "0000:af:00.0 Broadcom MegaRAID SAS-3 Controller" },
+  { id: "TEST!! raid-1", value: "0000:5e:00.0", label: "0000:5e:00.0 Broadcom MegaRAID SAS-3 Controller" },
 ];
 
 const LUN_DISKS: DiskOption[] = [
-  { id: "lun-1", value: "/dev/disk/by-path/pci-0000:5e:00.0-scsi-0:2:0:0", label: "/dev/sdb running 1.8T INTEL_SSD" },
-  { id: "lun-2", value: "/dev/disk/by-path/pci-0000:5e:00.0-scsi-0:2:1:0", label: "/dev/sdc running 1.8T INTEL_SSD" },
-  { id: "lun-3", value: "/dev/disk/by-path/pci-0000:af:00.0-scsi-0:2:0:0", label: "/dev/sdd running 1.8T SAMSUNG_SSD" },
+  { id: "TEST!! lun-1", value: "/dev/disk/by-path/pci-0000:5e:00.0-scsi-0:2:0:0", label: "/dev/sdb running 1.8T INTEL_SSD" },
 ];
 
 const BRIDGE_OPTIONS: SelectOption[] = [
-  { value: "bridge0", label: "bridge0 (connected)" },
-  { value: "bridge1", label: "bridge1 (connected)" },
-  { value: "bridge2", label: "bridge2 (disconnected)" },
+  { value: "TEST!! bridge0", label: "bridge0 (connected)" },
 ];
 
 const NIC_OPTIONS: SelectOption[] = [
-  { value: "0000:18:00.0", label: "eno1 ethernet 0000:18:00.0 (connected)" },
-  { value: "0000:18:00.1", label: "eno2 ethernet 0000:18:00.1 (connected)" },
-  { value: "0000:3b:00.0", label: "ens1f0 ethernet 0000:3b:00.0 (connected)" },
-  { value: "0000:3b:00.1", label: "ens1f1 ethernet 0000:3b:00.1 (connected)" },
+  { value: "TEST!! 0000:18:00.0", label: "eno1 ethernet 0000:18:00.0 (connected)" },
+  { value: "TEST!! 0000:18:00.1", label: "eno2 ethernet 0000:18:00.1 (connected)" },
+  { value: "TEST!! 0000:3b:00.0", label: "ens1f0 ethernet 0000:3b:00.0 (connected)" },
+  { value: "TEST!! 0000:3b:00.1", label: "ens1f1 ethernet 0000:3b:00.1 (connected)" },
 ];
 
 export default function StorageVmDeployWizardModal({
   isOpen,
   onClose,
 }: StorageVmDeployWizardModalProps) {
-  const [cpu, setCpu] = React.useState("8");
-  const [memory, setMemory] = React.useState("16");
+  const [cpu, setCpu] = React.useState("");
+  const [memory, setMemory] = React.useState("");
   const [diskMode, setDiskMode] = React.useState<DiskMode>("rp");
   const [selectedDisks, setSelectedDisks] = React.useState<string[]>([RAID_DISKS[0].value]);
-  const [mgmtBridge, setMgmtBridge] = React.useState("bridge0");
+  const [mgmtBridge, setMgmtBridge] = React.useState("");
   const [storageTrafficMode, setStorageTrafficMode] = React.useState<StorageTrafficMode>("np");
   const [storageNic1, setStorageNic1] = React.useState(NIC_OPTIONS[0].value);
   const [storageNic2, setStorageNic2] = React.useState(NIC_OPTIONS[1].value);
   const [replicaNic1, setReplicaNic1] = React.useState(NIC_OPTIONS[2].value);
   const [replicaNic2, setReplicaNic2] = React.useState(NIC_OPTIONS[3].value);
-  const [storageBridge, setStorageBridge] = React.useState("bridge1");
-  const [replicaBridge, setReplicaBridge] = React.useState("bridge2");
+  const [storageBridge, setStorageBridge] = React.useState("");
+  const [replicaBridge, setReplicaBridge] = React.useState("");
   const [hostsFileMode, setHostsFileMode] = React.useState<HostsFileMode>("existing");
   const [hostCount, setHostCount] = React.useState(3);
   const [hosts, setHosts] = React.useState<ClusterHostRow[]>(DEFAULT_HOSTS);
-  const [currentHostname] = React.useState("ablecube21");
+  const [currentHostname] = React.useState("");
 
-  const [scvmHostname, setScvmHostname] = React.useState("scvm1");
-  const [mgmtIp, setMgmtIp] = React.useState("10.10.2.11/16");
-  const [mgmtGateway, setMgmtGateway] = React.useState("10.10.0.1");
-  const [mgmtDns, setMgmtDns] = React.useState("8.8.8.8");
-  const [storageIp, setStorageIp] = React.useState("100.100.2.11/24");
-  const [replicaIp, setReplicaIp] = React.useState("100.200.2.11/24");
-  const [ccvmMgmtIp, setCcvmMgmtIp] = React.useState("10.10.2.10");
+  const [scvmHostname, setScvmHostname] = React.useState("");
+  const [mgmtIp, setMgmtIp] = React.useState(""); // 10.10.1.11/16
+  const [mgmtGateway, setMgmtGateway] = React.useState("");
+  const [mgmtDns, setMgmtDns] = React.useState("");
+  const [storageIp, setStorageIp] = React.useState(""); // 100.100.1.11/24
+  const [replicaIp, setReplicaIp] = React.useState(""); // 100.200.1.11/24
+  const [ccvmMgmtIp, setCcvmMgmtIp] = React.useState("");
 
   const [sshPrivateKey, setSshPrivateKey] = React.useState("");
   const [sshPublicKey, setSshPublicKey] = React.useState("");
@@ -170,28 +149,28 @@ export default function StorageVmDeployWizardModal({
   const deployNextStepRef = React.useRef<(() => void) | null>(null);
 
   const resetState = React.useCallback(() => {
-    setCpu("8");
-    setMemory("16");
+    setCpu("");
+    setMemory("");
     setDiskMode("rp");
     setSelectedDisks([RAID_DISKS[0].value]);
-    setMgmtBridge("bridge0");
+    setMgmtBridge("");
     setStorageTrafficMode("np");
     setStorageNic1(NIC_OPTIONS[0].value);
     setStorageNic2(NIC_OPTIONS[1].value);
     setReplicaNic1(NIC_OPTIONS[2].value);
     setReplicaNic2(NIC_OPTIONS[3].value);
-    setStorageBridge("bridge1");
-    setReplicaBridge("bridge2");
+    setStorageBridge("");
+    setReplicaBridge("");
     setHostsFileMode("existing");
     setHostCount(3);
     setHosts(DEFAULT_HOSTS);
-    setScvmHostname("scvm1");
-    setMgmtIp("10.10.2.11/16");
-    setMgmtGateway("10.10.0.1");
-    setMgmtDns("8.8.8.8");
-    setStorageIp("100.100.2.11/24");
-    setReplicaIp("100.200.2.11/24");
-    setCcvmMgmtIp("10.10.2.10");
+    setScvmHostname("");
+    setMgmtIp(""); // 10.10.1.11/16
+    setMgmtGateway("");
+    setMgmtDns("");
+    setStorageIp(""); // 100.100.1.11/24
+    setReplicaIp(""); // 100.200.1.11/24
+    setCcvmMgmtIp("");
     setSshPrivateKey("");
     setSshPublicKey("");
     setSshPrivateFilename("");

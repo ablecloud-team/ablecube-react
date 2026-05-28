@@ -66,34 +66,18 @@ interface CloudVmDeployWizardModalProps {
 
 const DEFAULT_HOSTS: ClusterHostRow[] = [
   {
-    hostName: "ablecube21",
-    hostIp: "10.10.2.1",
-    ccvmMgmtIp: "10.10.2.10",
-    hostPnIp: "100.100.2.1",
-    hostCnIp: "100.200.2.1",
-  },
-  {
-    hostName: "ablecube22",
-    hostIp: "10.10.2.2",
-    ccvmMgmtIp: "10.10.2.10",
-    hostPnIp: "100.100.2.2",
-    hostCnIp: "100.200.2.2",
-  },
-  {
-    hostName: "ablecube23",
-    hostIp: "10.10.2.3",
-    ccvmMgmtIp: "10.10.2.10",
-    hostPnIp: "100.100.2.3",
-    hostCnIp: "100.200.2.3",
-  },
+    hostName: "",
+    hostIp: "",
+    ccvmMgmtIp: "",
+    hostPnIp: "",
+    hostCnIp: "",
+  }
 ];
 
 const ROOT_DISK = "500 GiB (THIN Provisioning)";
 
 const BRIDGE_OPTIONS: SelectOption[] = [
   { value: "bridge0", label: "bridge0 (connected)" },
-  { value: "bridge1", label: "bridge1 (connected)" },
-  { value: "bridge2", label: "bridge2 (disconnected)" },
 ];
 
 const defaultFailoverHosts = () => DEFAULT_HOSTS.map((host) => host.hostPnIp);
@@ -104,21 +88,21 @@ export default function CloudVmDeployWizardModal({
   clusterType = "ablestack-hci",
 }: CloudVmDeployWizardModalProps) {
   const [clusterSensitivity, setClusterSensitivity] = React.useState("5");
-  const [cpu, setCpu] = React.useState("8");
-  const [memory, setMemory] = React.useState("16");
-  const [mgmtBridge, setMgmtBridge] = React.useState("bridge0");
+  const [cpu, setCpu] = React.useState("");
+  const [memory, setMemory] = React.useState("");
+  const [mgmtBridge, setMgmtBridge] = React.useState("");
   const [svcEnabled, setSvcEnabled] = React.useState(false);
-  const [svcBridge, setSvcBridge] = React.useState("bridge1");
+  const [svcBridge, setSvcBridge] = React.useState("");
 
   const [hostsFileMode, setHostsFileMode] = React.useState<HostsFileMode>("existing");
-  const [currentHostname] = React.useState("ablecube21");
+  const [currentHostname] = React.useState("");
   const [hostCount, setHostCount] = React.useState(3);
   const [hosts, setHosts] = React.useState<ClusterHostRow[]>(DEFAULT_HOSTS);
 
   const [ccvmHostname, setCcvmHostname] = React.useState("ccvm");
-  const [mgmtIp, setMgmtIp] = React.useState("10.10.2.10/16");
-  const [mgmtGateway, setMgmtGateway] = React.useState("10.10.0.1");
-  const [mgmtDns, setMgmtDns] = React.useState("8.8.8.8");
+  const [mgmtIp, setMgmtIp] = React.useState(""); // 10.10.1.10/16
+  const [mgmtGateway, setMgmtGateway] = React.useState("");
+  const [mgmtDns, setMgmtDns] = React.useState("");
   const [mgmtVlan, setMgmtVlan] = React.useState("");
   const [svcIp, setSvcIp] = React.useState("");
   const [svcGateway, setSvcGateway] = React.useState("");
@@ -149,18 +133,18 @@ export default function CloudVmDeployWizardModal({
 
   const resetState = React.useCallback(() => {
     setClusterSensitivity("5");
-    setCpu("8");
-    setMemory("16");
-    setMgmtBridge("bridge0");
+    setCpu("");
+    setMemory("");
+    setMgmtBridge("");
     setSvcEnabled(false);
-    setSvcBridge("bridge1");
+    setSvcBridge("");
     setHostsFileMode("existing");
     setHostCount(3);
     setHosts(DEFAULT_HOSTS);
     setCcvmHostname("ccvm");
-    setMgmtIp("10.10.2.10/16");
-    setMgmtGateway("10.10.0.1");
-    setMgmtDns("8.8.8.8");
+    setMgmtIp(""); // 10.10.1.10/16
+    setMgmtGateway("");
+    setMgmtDns("");
     setMgmtVlan("");
     setSvcIp("");
     setSvcGateway("");

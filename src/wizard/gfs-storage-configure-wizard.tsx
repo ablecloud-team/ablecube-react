@@ -45,15 +45,12 @@ interface GfsStorageConfigureWizardModalProps {
 }
 
 const DEFAULT_HOSTS: MonitoringHostIpmi[] = [
-  { hostName: "ablecube21", ip: "10.10.2.1", username: "", password: "" },
-  { hostName: "ablecube22", ip: "10.10.2.2", username: "", password: "" },
-  { hostName: "ablecube23", ip: "10.10.2.3", username: "", password: "" },
+  { hostName: "", ip: "", username: "", password: "" },
 ];
 
 const DEFAULT_DISKS = [
-  { id: "mpathb", label: "/dev/mapper/mpathb (active) 1.8T DELL 3600508" },
-  { id: "mpathc", label: "/dev/mapper/mpathc (active) 1.8T DELL 3600509" },
-  { id: "sdb", label: "/dev/sdb (SAS) 900G SEAGATE 5000C500" },
+  { id: "TEST!! mpathb", label: "/dev/mapper/mpathb (active) 1.8T DELL 3600508" },
+  { id: "TEST!! sdb", label: "/dev/sdb (SAS) 900G SEAGATE 5000C500" },
 ];
 
 export default function GfsStorageConfigureWizardModal({

@@ -60,31 +60,31 @@ interface ClusterConfigPrepareWizardModalProps {
 
 const DEFAULT_HOSTS: ClusterHostRow[] = [
   {
-    hostName: "ablecube32-1",
-    hostIp: "10.10.32.1",
-    storageIp: "100.100.32.1",
-    scvmMgmtIp: "10.10.32.11",
-    hostPnIp: "100.100.32.1",
-    scvmPnIp: "100.100.32.11",
-    scvmCnIp: "100.200.32.11",
+    hostName: "",
+    hostIp: "",
+    storageIp: "",
+    scvmMgmtIp: "",
+    hostPnIp: "",
+    scvmPnIp: "",
+    scvmCnIp: "",
   },
   {
-    hostName: "ablecube32-2",
-    hostIp: "10.10.32.2",
-    storageIp: "100.100.32.2",
-    scvmMgmtIp: "10.10.32.12",
-    hostPnIp: "100.100.32.2",
-    scvmPnIp: "100.100.32.12",
-    scvmCnIp: "100.200.32.12",
+    hostName: "",
+    hostIp: "",
+    storageIp: "",
+    scvmMgmtIp: "",
+    hostPnIp: "",
+    scvmPnIp: "",
+    scvmCnIp: "",
   },
   {
-    hostName: "ablecube32-3",
-    hostIp: "10.10.32.3",
-    storageIp: "100.100.32.3",
-    scvmMgmtIp: "10.10.32.13",
-    hostPnIp: "100.100.32.3",
-    scvmPnIp: "100.100.32.13",
-    scvmCnIp: "100.200.32.13",
+    hostName: "",
+    hostIp: "",
+    storageIp: "",
+    scvmMgmtIp: "",
+    hostPnIp: "",
+    scvmPnIp: "",
+    scvmCnIp: "",
   },
 ];
 
@@ -99,14 +99,14 @@ export default function ClusterConfigPrepareWizardModal({
   const [hosts, setHosts] = React.useState<ClusterHostRow[]>(DEFAULT_HOSTS);
   const [hostCount, setHostCount] = React.useState(3);
   const [isIscsiExclusive, setIsIscsiExclusive] = React.useState(false);
-  const [currentHostname, setCurrentHostname] = React.useState("ablecube32-1");
-  const [ccvmMgmtIp, setCcvmMgmtIp] = React.useState("10.10.32.10");
-  const [mgmtCidr, setMgmtCidr] = React.useState("16");
-  const [mgmtGateway, setMgmtGateway] = React.useState("10.10.0.1");
-  const [mgmtDns, setMgmtDns] = React.useState("8.8.8.8");
-  const [pcsPnIp1, setPcsPnIp1] = React.useState("100.100.32.1");
-  const [pcsPnIp2, setPcsPnIp2] = React.useState("100.100.32.2");
-  const [pcsPnIp3, setPcsPnIp3] = React.useState("100.100.32.3");
+  const [currentHostname, setCurrentHostname] = React.useState("");
+  const [ccvmMgmtIp, setCcvmMgmtIp] = React.useState("");
+  const [mgmtCidr, setMgmtCidr] = React.useState("");
+  const [mgmtGateway, setMgmtGateway] = React.useState("");
+  const [mgmtDns, setMgmtDns] = React.useState("");
+  const [pcsPnIp1, setPcsPnIp1] = React.useState("");
+  const [pcsPnIp2, setPcsPnIp2] = React.useState("");
+  const [pcsPnIp3, setPcsPnIp3] = React.useState("");
   const [hostsFileText, setHostsFileText] = React.useState("");
   const [sshPrivateText, setSshPrivateText] = React.useState("");
   const [sshPublicText, setSshPublicText] = React.useState("");
@@ -115,9 +115,9 @@ export default function ClusterConfigPrepareWizardModal({
   const [hostsFilename, setHostsFilename] = React.useState("");
   const [timeServerType, setTimeServerType] = React.useState<TimeServerType>("internal");
   const [hostRole, setHostRole] = React.useState<HostRole>("master");
-  const [externalTimeServer, setExternalTimeServer] = React.useState("time.google.com");
-  const [timeServer1, setTimeServer1] = React.useState("100.100.33.1");
-  const [timeServer2, setTimeServer2] = React.useState("100.100.33.2");
+  const [externalTimeServer, setExternalTimeServer] = React.useState("");
+  const [timeServer1, setTimeServer1] = React.useState("");
+  const [timeServer2, setTimeServer2] = React.useState("");
   const [ipmiIp, setIpmiIp] = React.useState("");
   const [ipmiUser, setIpmiUser] = React.useState("");
   const [ipmiPassword, setIpmiPassword] = React.useState("");
@@ -137,14 +137,14 @@ export default function ClusterConfigPrepareWizardModal({
     setHosts(DEFAULT_HOSTS);
     setHostCount(3);
     setIsIscsiExclusive(false);
-    setCurrentHostname("ablecube32-1");
-    setCcvmMgmtIp("10.10.32.10");
-    setMgmtCidr("16");
-    setMgmtGateway("10.10.0.1");
-    setMgmtDns("8.8.8.8");
-    setPcsPnIp1("100.100.32.1");
-    setPcsPnIp2("100.100.32.2");
-    setPcsPnIp3("100.100.32.3");
+    setCurrentHostname("");
+    setCcvmMgmtIp("");
+    setMgmtCidr("");
+    setMgmtGateway("");
+    setMgmtDns("");
+    setPcsPnIp1("");
+    setPcsPnIp2("");
+    setPcsPnIp3("");
     setHostsFileText("");
     setSshPrivateText("");
     setSshPublicText("");
@@ -153,9 +153,9 @@ export default function ClusterConfigPrepareWizardModal({
     setHostsFilename("");
     setTimeServerType("internal");
     setHostRole("master");
-    setExternalTimeServer("time.google.com");
-    setTimeServer1("100.100.33.1");
-    setTimeServer2("100.100.33.2");
+    setExternalTimeServer("");
+    setTimeServer1("");
+    setTimeServer2("");
     setIpmiIp("");
     setIpmiUser("");
     setIpmiPassword("");
@@ -196,7 +196,7 @@ export default function ClusterConfigPrepareWizardModal({
       if (safeCount === prev.length) return prev;
       if (safeCount < prev.length) return prev.slice(0, safeCount);
       const extras = Array.from({ length: safeCount - prev.length }, (_, idx) => ({
-        hostName: `ablecube32-${prev.length + idx + 1}`,
+        hostName: "",
         hostIp: "",
         storageIp: "",
         scvmMgmtIp: "",

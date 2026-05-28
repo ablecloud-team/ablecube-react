@@ -43,9 +43,9 @@ interface MonitoringCenterWizardModalProps {
 }
 
 const DEFAULT_HOST_COUNT = 3;
-const DEFAULT_CCVM_IP = "10.10.2.10";
-const DEFAULT_CUBE_HOSTS = ["10.10.2.1", "10.10.2.2", "10.10.2.3"];
-const DEFAULT_SCVM_HOSTS = ["10.10.2.11", "10.10.2.12", "10.10.2.13"];
+const DEFAULT_CCVM_IP = "";
+const DEFAULT_CUBE_HOSTS = [""];
+const DEFAULT_SCVM_HOSTS = [""];
 
 const resizeHostList = (values: string[], count: number) =>
   Array.from({ length: count }, (_, index) => values[index] ?? "");

@@ -114,7 +114,7 @@ const parseMigrationNodes = (nodeStatus: string, executionNode: string) => {
   const match = nodeStatus.match(/\(([^)]+)\)/);
   const nodes = match
     ? match[1].split(",").map((node) => node.trim()).filter(Boolean)
-    : ["100.100.22.1", "100.100.22.2", "100.100.22.3"];
+    : [""];
 
   return nodes.filter((node) => node !== executionNode);
 };
