@@ -1,5 +1,7 @@
 import { requestCubeApi } from "./client";
 
+export type StorageClusterMaintenanceAction = "set" | "unset";
+
 export interface StorageClusterStatusData {
   clusterStatus: string;
   diskStatus: string;
@@ -8,6 +10,35 @@ export interface StorageClusterStatusData {
   storagePools: string;
   storageCapacity: string;
   maintenanceStatus: boolean;
+  healthChecks: StorageClusterHealthCheck[];
+}
+
+export interface StorageClusterHealthCheck {
+  name: string;
+  severity: string;
+  summary: string;
+  count?: string;
+  details: string[];
+}
+
+interface GlueHealthCheckSummary {
+  message?: string;
+  count?: number | string;
+}
+
+interface GlueHealthCheckDetail {
+  message?: string;
+}
+
+interface GlueHealthCheckResponse {
+  severity?: string;
+  summary?: GlueHealthCheckSummary;
+  detail?: Array<GlueHealthCheckDetail | string>;
+}
+
+interface GlueHealthChecksResponse {
+  [checkName: string]: GlueHealthCheckResponse | undefined;
+  MON_DOWN?: GlueHealthCheckResponse;
 }
 
 interface GlueClusterStatusResponse {
@@ -32,16 +63,40 @@ interface GlueClusterStatusResponse {
     };
     health?: {
       status?: string;
-      checks?: {
-        MON_DOWN?: {
-          summary?: {
-            count?: number | string;
-          };
-        };
-      };
+      checks?: GlueHealthChecksResponse;
     };
   };
 }
+
+interface GlueClusterUpdateResponse {
+  code?: number | string;
+  val?: unknown;
+  message?: string;
+  error?: string;
+  retname?: string;
+}
+
+interface GlueConfigUpdateResponse {
+  code?: number | string;
+  val?: unknown;
+  message?: string;
+  error?: string;
+  retname?: string;
+}
+
+interface StorageCenterUrlResponse {
+  code?: number | string;
+  val?: {
+    storageCenter?: string;
+  };
+  message?: string;
+  error?: string;
+}
+
+const GLUE_CLUSTER_MAINTENANCE_ACTION = {
+  set: "set_noout",
+  unset: "unset_noout",
+} as const;
 
 export const STORAGE_CLUSTER_STATUS_FALLBACK: StorageClusterStatusData = {
   clusterStatus: "N/A",
@@ -51,6 +106,7 @@ export const STORAGE_CLUSTER_STATUS_FALLBACK: StorageClusterStatusData = {
   storagePools: "N/A",
   storageCapacity: "N/A",
   maintenanceStatus: false,
+  healthChecks: [],
 };
 
 function normalizeValue(value: number | string | undefined): string | null {
@@ -191,6 +247,47 @@ function formatStorageCapacity(response: GlueClusterStatusResponse): string {
     : "N/A";
 }
 
+function formatHealthCheckDetail(detail: GlueHealthCheckDetail | string): string | null {
+  if (typeof detail === "string") {
+    const normalizedDetail = detail.trim();
+
+    return normalizedDetail || null;
+  }
+
+  return normalizeValue(detail.message);
+}
+
+function formatHealthChecks(
+  checks: GlueHealthChecksResponse | undefined
+): StorageClusterHealthCheck[] {
+  if (!checks) {
+    return [];
+  }
+
+  return Object.entries(checks)
+    .map(([name, check]) => {
+      if (!check) {
+        return null;
+      }
+
+      const summary = normalizeValue(check.summary?.message) ?? "N/A";
+      const count = normalizeValue(check.summary?.count);
+      const severity = normalizeValue(check.severity) ?? "N/A";
+      const details = check.detail
+        ?.map(formatHealthCheckDetail)
+        .filter((detail): detail is string => Boolean(detail)) ?? [];
+
+      return {
+        name,
+        severity,
+        summary,
+        ...(count ? { count } : {}),
+        details,
+      };
+    })
+    .filter((check): check is StorageClusterHealthCheck => Boolean(check));
+}
+
 function mapGlueClusterStatus(response: GlueClusterStatusResponse): StorageClusterStatusData {
   return {
     clusterStatus: response.cluster_status ?? response.json_raw?.health?.status ?? "N/A",
@@ -200,6 +297,7 @@ function mapGlueClusterStatus(response: GlueClusterStatusResponse): StorageClust
     storagePools: formatStoragePools(response.pools),
     storageCapacity: formatStorageCapacity(response),
     maintenanceStatus: response.maintenance_status ?? false,
+    healthChecks: formatHealthChecks(response.json_raw?.health?.checks),
   };
 }
 
@@ -209,4 +307,114 @@ export async function fetchStorageClusterStatus(): Promise<StorageClusterStatusD
   );
 
   return mapGlueClusterStatus(parsed);
+}
+
+function getGlueClusterUpdateError(response: GlueClusterUpdateResponse): string {
+  if (typeof response.error === "string" && response.error.trim()) {
+    return response.error;
+  }
+
+  if (typeof response.message === "string" && response.message.trim()) {
+    return response.message;
+  }
+
+  if (typeof response.val === "string" && response.val.trim()) {
+    return response.val;
+  }
+
+  return "스토리지 클러스터 유지보수 모드 변경 요청에 실패했습니다.";
+}
+
+function getApiErrorMessage(response: {
+  error?: string;
+  message?: string;
+  val?: unknown;
+}, fallbackMessage: string): string {
+  if (typeof response.error === "string" && response.error.trim()) {
+    return response.error;
+  }
+
+  if (typeof response.message === "string" && response.message.trim()) {
+    return response.message;
+  }
+
+  if (typeof response.val === "string" && response.val.trim()) {
+    return response.val;
+  }
+
+  return fallbackMessage;
+}
+
+export async function updateStorageClusterMaintenanceMode(
+  mode: StorageClusterMaintenanceAction
+): Promise<GlueClusterUpdateResponse> {
+  const parsed = await requestCubeApi<GlueClusterUpdateResponse>(
+    "/api/v1/cube/gluecluster/update",
+    {
+      method: "POST",
+      body: {
+        action: GLUE_CLUSTER_MAINTENANCE_ACTION[mode],
+      },
+    }
+  );
+
+  if (parsed.code !== undefined && String(parsed.code) !== "200") {
+    throw new Error(getGlueClusterUpdateError(parsed));
+  }
+
+  return parsed;
+}
+
+export async function updateGlueConfigAllHosts(): Promise<GlueConfigUpdateResponse> {
+  const parsed = await requestCubeApi<GlueConfigUpdateResponse>(
+    "/api/v1/cube/glue/config/update",
+    {
+      method: "POST",
+      body: {
+        action: "update",
+      },
+    }
+  );
+
+  if (parsed.code !== undefined && String(parsed.code) !== "200") {
+    throw new Error(getApiErrorMessage(
+      parsed,
+      "전체 호스트 Glue 설정 업데이트에 실패했습니다."
+    ));
+  }
+
+  return parsed;
+}
+
+export async function fetchStorageCenterUrl(): Promise<string> {
+  const parsed = await requestCubeApi<StorageCenterUrlResponse>(
+    "/api/v1/cube/url?option=storageCenter"
+  );
+
+  if (parsed.code !== undefined && String(parsed.code) !== "200") {
+    throw new Error(getApiErrorMessage(
+      parsed,
+      "스토리지센터 연결 주소 조회에 실패했습니다."
+    ));
+  }
+
+  const storageCenterUrl = normalizeValue(parsed.val?.storageCenter);
+
+  if (!storageCenterUrl) {
+    throw new Error("스토리지센터 연결 주소가 응답에 없습니다.");
+  }
+
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(storageCenterUrl);
+  } catch {
+    throw new Error("스토리지센터 연결 주소 형식이 올바르지 않습니다.");
+  }
+
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw new Error("스토리지센터 연결 주소 형식이 올바르지 않습니다.");
+  }
+
+  return parsedUrl.href;
 }

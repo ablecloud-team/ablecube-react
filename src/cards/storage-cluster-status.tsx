@@ -6,6 +6,7 @@ import {
   CardBody,
   CardFooter,
   Label,
+  Button,
   Flex,
   FlexItem,
   DescriptionList,
@@ -24,10 +25,12 @@ import {
   ExclamationTriangleIcon,
   ExclamationCircleIcon,
   EllipsisVIcon,
+  SearchIcon,
 } from "@patternfly/react-icons";
 
 import ClvmDiskActionModal from "./clvm-disk-action-modal";
 import type { ClvmDiskAction } from "./clvm-disk-action-modal";
+import StorageClusterHealthChecksModal from "./storage-cluster-health-checks-modal";
 import {
   STATUS_LOADING_LABEL,
   STATUS_UNKNOWN_LABEL,
@@ -39,11 +42,16 @@ import CheckedConfirmActionModal from "../components/common/CheckedConfirmAction
 import ConfirmActionModal from "../components/common/ConfirmActionModal";
 import MaintenanceModeConfirmModal from "../components/common/MaintenanceModeConfirmModal";
 import type { MaintenanceModeAction } from "../components/common/MaintenanceModeConfirmModal";
+import ActionProgressModal from "../components/common/ActionProgressModal";
+import type { ActionProgressPhase } from "../components/common/ActionProgressModal";
 import { useStatusPolling } from "../hooks/useStatusPolling";
 import {
+  fetchStorageCenterUrl,
   fetchStorageClusterStatus,
   STORAGE_CLUSTER_STATUS_FALLBACK,
   type StorageClusterStatusData,
+  updateGlueConfigAllHosts,
+  updateStorageClusterMaintenanceMode,
 } from "../services/api/storage-cluster-status";
 import "./status-card.scss";
 
@@ -70,6 +78,24 @@ export default function StorageClusterStatus() {
   const [isMaintenance, setIsMaintenance] = React.useState(false);
   const [maintenanceModeToConfirm, setMaintenanceModeToConfirm] =
     React.useState<MaintenanceModeAction | null>(null);
+  const [maintenanceProgress, setMaintenanceProgress] = React.useState<{
+    isOpen: boolean;
+    phase: ActionProgressPhase;
+    message: string;
+  }>({
+    isOpen: false,
+    phase: "running",
+    message: "",
+  });
+  const [glueUpdateProgress, setGlueUpdateProgress] = React.useState<{
+    isOpen: boolean;
+    phase: ActionProgressPhase;
+    message: string;
+  }>({
+    isOpen: false,
+    phase: "running",
+    message: "",
+  });
   const [isGlueUpdateModalOpen, setIsGlueUpdateModalOpen] = React.useState(false);
   const [isExternalStorageSyncModalOpen, setIsExternalStorageSyncModalOpen] = React.useState(false);
   const [isExternalStorageRescanModalOpen, setIsExternalStorageRescanModalOpen] = React.useState(false);
@@ -77,6 +103,8 @@ export default function StorageClusterStatus() {
   const [isWwnListModalOpen, setIsWwnListModalOpen] = React.useState(false);
   const [isAutoShutdownModalOpen, setIsAutoShutdownModalOpen] = React.useState(false);
   const [isRemoveCubeHostModalOpen, setIsRemoveCubeHostModalOpen] = React.useState(false);
+  const [isHealthChecksModalOpen, setIsHealthChecksModalOpen] = React.useState(false);
+  const [storageCenterConnectionError, setStorageCenterConnectionError] = React.useState("");
 
   const handleStatusLoad = React.useCallback((nextData: StorageClusterStatusData) => {
     setIsMaintenance(nextData.maintenanceStatus);
@@ -106,6 +134,8 @@ export default function StorageClusterStatus() {
 
   const isClusterError = data.clusterStatus === "HEALTH_ERR";
   const isClusterUnknown = data.clusterStatus === "N/A" || data.clusterStatus === "";
+  const canOpenHealthChecks =
+    !isCollecting && !isClusterUnknown && data.clusterStatus !== "HEALTH_OK";
   const footerMessage = isCollecting
     ? "스토리지센터 클러스터 상태 체크 중..."
     : isClusterUnknown
@@ -126,10 +156,46 @@ export default function StorageClusterStatus() {
     setMaintenanceModeToConfirm(null);
   };
 
-  const confirmMaintenanceModeChange = () => {
+  const confirmMaintenanceModeChange = async () => {
     if (!maintenanceModeToConfirm) return;
-    setIsMaintenance(maintenanceModeToConfirm === "set");
+
+    const mode = maintenanceModeToConfirm;
+    const isNextMaintenance = mode === "set";
+    const actionLabel = isNextMaintenance ? "설정" : "해제";
+
     setMaintenanceModeToConfirm(null);
+    setMaintenanceProgress({
+      isOpen: true,
+      phase: "running",
+      message: "스토리지 클러스터 유지보수모드 변경중입니다.",
+    });
+
+    try {
+      await updateStorageClusterMaintenanceMode(mode);
+      sessionStorage.setItem(
+        "storage_cluster_maintenance_status",
+        String(isNextMaintenance)
+      );
+      setIsMaintenance(isNextMaintenance);
+      setMaintenanceProgress({
+        isOpen: true,
+        phase: "success",
+        message: `스토리지 클러스터 유지보수 모드 ${actionLabel}이 완료되었습니다.`,
+      });
+    } catch (error) {
+      console.error("storage cluster maintenance mode update API error:", error);
+      setMaintenanceProgress({
+        isOpen: true,
+        phase: "error",
+        message: error instanceof Error
+          ? error.message
+          : "스토리지 클러스터 유지보수 모드 변경 요청에 실패했습니다.",
+      });
+    }
+  };
+
+  const closeMaintenanceProgressModal = () => {
+    setMaintenanceProgress((prev) => ({ ...prev, isOpen: false }));
   };
 
   const openGlueUpdateModal = () => {
@@ -137,13 +203,68 @@ export default function StorageClusterStatus() {
     setIsOpen(false);
   };
 
+  const openStorageCenter = async () => {
+    setIsOpen(false);
+
+    const storageCenterWindow = window.open("about:blank", "_blank");
+
+    if (!storageCenterWindow) {
+      setStorageCenterConnectionError("브라우저 팝업 차단을 해제한 후 다시 시도해주세요.");
+      return;
+    }
+
+    try {
+      storageCenterWindow.document.title = "스토리지센터 연결";
+      storageCenterWindow.document.body.textContent = "스토리지센터 주소를 확인하는 중입니다.";
+
+      const storageCenterUrl = await fetchStorageCenterUrl();
+
+      storageCenterWindow.opener = null;
+      storageCenterWindow.location.href = storageCenterUrl;
+    } catch (error) {
+      storageCenterWindow.close();
+      console.error("storage center url API error:", error);
+      setStorageCenterConnectionError(
+        error instanceof Error
+          ? error.message
+          : "스토리지센터 연결 주소 조회에 실패했습니다."
+      );
+    }
+  };
+
   const closeGlueUpdateModal = () => {
     setIsGlueUpdateModalOpen(false);
   };
 
-  const confirmGlueUpdate = () => {
-    // TODO: 백엔드 API 전환 후 python/glue/update_glue_config.py update 호출로 연결합니다.
+  const confirmGlueUpdate = async () => {
     setIsGlueUpdateModalOpen(false);
+    setGlueUpdateProgress({
+      isOpen: true,
+      phase: "running",
+      message: "전체 호스트 Glue 설정 업데이트를 진행중입니다.",
+    });
+
+    try {
+      await updateGlueConfigAllHosts();
+      setGlueUpdateProgress({
+        isOpen: true,
+        phase: "success",
+        message: "전체 호스트 Glue 설정 업데이트가 완료되었습니다.",
+      });
+    } catch (error) {
+      console.error("glue config update API error:", error);
+      setGlueUpdateProgress({
+        isOpen: true,
+        phase: "error",
+        message: error instanceof Error
+          ? error.message
+          : "전체 호스트 Glue 설정 업데이트에 실패했습니다.",
+      });
+    }
+  };
+
+  const closeGlueUpdateProgressModal = () => {
+    setGlueUpdateProgress((prev) => ({ ...prev, isOpen: false }));
   };
 
   const openExternalStorageSyncModal = () => {
@@ -190,7 +311,6 @@ export default function StorageClusterStatus() {
   };
 
   const openWwnListModal = () => {
-    // TODO: 백엔드 API 전환 후 python/clvm/disk_manage.py --list-hba-wwn 호출 결과로 목록을 채웁니다.
     setIsWwnListModalOpen(true);
     setIsOpen(false);
   };
@@ -225,6 +345,14 @@ export default function StorageClusterStatus() {
   const confirmRemoveCubeHost = () => {
     // TODO: 백엔드 API 전환 후 python/cluster/remove_cube_host.py remove 호출로 연결합니다.
     setIsRemoveCubeHostModalOpen(false);
+  };
+
+  const closeHealthChecksModal = () => {
+    setIsHealthChecksModalOpen(false);
+  };
+
+  const closeStorageCenterConnectionError = () => {
+    setStorageCenterConnectionError("");
   };
 
   return (
@@ -265,68 +393,55 @@ export default function StorageClusterStatus() {
                 </DropdownItem>
 
                 <DropdownItem
-                  isDisabled={isMaintenance}
-                  onClick={() => {
-                    setIsMaintenance(false);
-                    setIsOpen(false);
-                  }}
+                  onClick={openStorageCenter}
                 >
                   스토리지센터 연결
                 </DropdownItem>
 
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={openGlueUpdateModal}
                 >
                   전체 호스트 Glue 설정 업데이트
                 </DropdownItem>
                 
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={openExternalStorageSyncModal}
                 >
                   외부 스토리지 동기화
                 </DropdownItem>
 
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={openExternalStorageRescanModal}
                 >
                   외부 스토리지 재검색
                 </DropdownItem>
 
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={() => openClvmDiskActionModal("add")}
                 >
                   CLVM 디스크 추가
                 </DropdownItem>
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={() => openClvmDiskActionModal("delete")}
                 >
                   CLVM 디스크 삭제
                 </DropdownItem>
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={() => openClvmDiskActionModal("info")}
                 >
                   CLVM 디스크 정보
                 </DropdownItem>
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={openWwnListModal}
                 >
                   WWN 목록 조회
                 </DropdownItem>
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={openAutoShutdownModal}
                 >
                   전체 시스템 자동 종료
                 </DropdownItem>
                 <DropdownItem
-                  isDisabled={isMaintenance}
                   onClick={openRemoveCubeHostModal}
                 >
                   Cube 호스트 제거
@@ -356,13 +471,25 @@ export default function StorageClusterStatus() {
           <DescriptionListGroup>
             <DescriptionListTerm>클러스터 상태</DescriptionListTerm>
             <DescriptionListDescription>
-              <Label
-                className="ct-health-label"
-                color={statusMeta.color}
-                icon={statusMeta.icon}
-              >
-                {statusMeta.label}
-              </Label>
+              <span className="ct-health-status">
+                <Label
+                  className="ct-health-label"
+                  color={statusMeta.color}
+                  icon={statusMeta.icon}
+                >
+                  {statusMeta.label}
+                </Label>
+                {canOpenHealthChecks ? (
+                  <Button
+                    variant="plain"
+                    aria-label="스토리지 클러스터 Health 상세 보기"
+                    className="ct-health-detail-button"
+                    onClick={() => setIsHealthChecksModalOpen(true)}
+                  >
+                    <SearchIcon aria-hidden="true" />
+                  </Button>
+                ) : null}
+              </span>
             </DescriptionListDescription>
           </DescriptionListGroup>
 
@@ -407,12 +534,42 @@ export default function StorageClusterStatus() {
         onConfirm={confirmMaintenanceModeChange}
       />
 
+      <ActionProgressModal
+        isOpen={maintenanceProgress.isOpen}
+        title="스토리지 클러스터 유지보수 모드 변경"
+        phase={maintenanceProgress.phase}
+        message={maintenanceProgress.message}
+        onClose={closeMaintenanceProgressModal}
+      />
+
+      <StorageClusterHealthChecksModal
+        isOpen={isHealthChecksModalOpen}
+        checks={data.healthChecks}
+        onClose={closeHealthChecksModal}
+      />
+
+      <ActionProgressModal
+        isOpen={Boolean(storageCenterConnectionError)}
+        title="스토리지센터 연결"
+        phase="error"
+        message={storageCenterConnectionError}
+        onClose={closeStorageCenterConnectionError}
+      />
+
       <ConfirmActionModal
         isOpen={isGlueUpdateModalOpen}
         title="전체 호스트 Glue 설정 업데이트"
         message="전체 호스트 Glue 설정 업데이트를 진행하시겠습니까?"
         onClose={closeGlueUpdateModal}
         onConfirm={confirmGlueUpdate}
+      />
+
+      <ActionProgressModal
+        isOpen={glueUpdateProgress.isOpen}
+        title="전체 호스트 Glue 설정 업데이트"
+        phase={glueUpdateProgress.phase}
+        message={glueUpdateProgress.message}
+        onClose={closeGlueUpdateProgressModal}
       />
 
       <CheckedConfirmActionModal

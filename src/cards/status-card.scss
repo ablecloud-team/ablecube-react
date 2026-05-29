@@ -111,6 +111,8 @@
 
 .ct-maintenance-mode-modal,
 .ct-action-confirm-modal,
+.ct-action-progress-modal,
+.ct-health-checks-modal,
 .ct-clvm-disk-modal,
 .ct-wwn-list-modal,
 .ct-gfs-mount-info-modal {
@@ -176,6 +178,84 @@
   width: min(760px, calc(100vw - 32px));
 }
 
+.ct-health-checks-modal {
+  width: min(840px, calc(100vw - 32px));
+}
+
+.ct-health-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pf-v6-c-button.ct-health-detail-button {
+  --pf-v6-c-button--PaddingInlineStart: 4px;
+  --pf-v6-c-button--PaddingInlineEnd: 4px;
+  --pf-v6-c-button--PaddingBlockStart: 2px;
+  --pf-v6-c-button--PaddingBlockEnd: 2px;
+
+  min-width: 24px;
+  color: #0066cc;
+}
+
+.ct-health-checks-modal__list {
+  display: grid;
+  gap: 14px;
+  max-height: min(520px, 60vh);
+  overflow-y: auto;
+}
+
+.ct-health-checks-modal__item {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #d2d2d2;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.ct-health-checks-modal__item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ct-health-checks-modal__name {
+  min-width: 0;
+  color: #151515;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.ct-health-checks-modal__summary {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+
+  div {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  dt {
+    color: #6a6e73;
+    font-weight: 700;
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.ct-health-checks-modal__details {
+  margin-block-start: 0;
+  padding-inline-start: 20px;
+  overflow-wrap: anywhere;
+}
+
 .ct-action-confirm-modal__body {
   display: grid;
   gap: 14px;
@@ -235,6 +315,67 @@
     font-weight: 400;
     background: #fff;
   }
+}
+
+.ct-action-progress-modal__body {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  text-align: center;
+
+  .pf-v6-c-alert {
+    width: 100%;
+    text-align: start;
+  }
+}
+
+.ct-action-progress-modal__body--running {
+  min-block-size: 24px;
+}
+
+.ct-action-progress-modal__running {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-inline-size: 100%;
+  color: #151515;
+  line-height: 1.4;
+
+  p {
+    min-inline-size: 0;
+    display: inline-flex;
+    align-items: center;
+    margin-block: 0;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+    line-height: inherit;
+  }
+}
+
+.pf-v6-c-spinner.ct-action-progress-modal__spinner {
+  --pf-v6-c-spinner--diameter: 16px;
+
+  flex: 0 0 auto;
+  align-self: center;
+  inline-size: var(--pf-v6-c-spinner--diameter);
+  block-size: var(--pf-v6-c-spinner--diameter);
+}
+
+.ct-action-progress-modal__footer--running {
+  min-block-size: 28px;
+  padding-block: 4px 24px;
+}
+
+.ct-action-progress-modal__focus-target {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
 }
 
 .ct-clvm-disk-modal__warning {
@@ -302,13 +443,28 @@
   overflow: auto;
 }
 
+.ct-wwn-list-modal__loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 96px;
+
+  p {
+    margin-block: 0;
+  }
+}
+
 .ct-wwn-list-modal__table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   text-align: left;
 
   th,
   td {
+    inline-size: 50%;
     padding: 8px;
     border-bottom: 1px solid #ddd;
     vertical-align: top;
@@ -318,6 +474,16 @@
     background-color: #f2f2f2;
     font-weight: 700;
   }
+}
+
+.ct-wwn-list-modal__wwn {
+  font-family: monospace;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.ct-wwn-list-modal__empty {
+  color: #6a6e73;
 }
 
 .ct-gfs-disk-info {

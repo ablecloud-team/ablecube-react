@@ -77,7 +77,8 @@ const DEFAULT_HOSTS: ClusterHostRow[] = [
 const ROOT_DISK = "500 GiB (THIN Provisioning)";
 
 const BRIDGE_OPTIONS: SelectOption[] = [
-  { value: "bridge0", label: "bridge0 (connected)" },
+  { value: "", label: "선택하십시오" },
+  { value: "bridge0", label: "TEST!!bridge0 (connected)" },
 ];
 
 const defaultFailoverHosts = () => DEFAULT_HOSTS.map((host) => host.hostPnIp);

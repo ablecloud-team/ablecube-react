@@ -49,8 +49,8 @@ const DEFAULT_HOSTS: MonitoringHostIpmi[] = [
 ];
 
 const DEFAULT_DISKS = [
-  { id: "TEST!! mpathb", label: "/dev/mapper/mpathb (active) 1.8T DELL 3600508" },
-  { id: "TEST!! sdb", label: "/dev/sdb (SAS) 900G SEAGATE 5000C500" },
+  { id: "mpathb", label: "TEST!! /dev/mapper/mpathb (active) 1.8T DELL 3600508" },
+  { id: "sdb", label: "TEST!! /dev/sdb (SAS) 900G SEAGATE 5000C500" },
 ];
 
 export default function GfsStorageConfigureWizardModal({

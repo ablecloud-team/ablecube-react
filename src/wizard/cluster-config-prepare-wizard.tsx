@@ -819,8 +819,7 @@ export default function ClusterConfigPrepareWizardModal({
                 <FormGroup label="iSCSI 스토리지 전용" fieldId="iscsi-storage-exclusive">
                   <Switch
                     id="iscsi-storage-exclusive"
-                    label="사용"
-                    labelOff="미사용"
+                    label={isIscsiExclusive ? "사용" : "미사용"}
                     isChecked={isIscsiExclusive}
                     isDisabled={hostsFileMode === "existing"}
                     onChange={(_event, checked) => setIsIscsiExclusive(checked)}

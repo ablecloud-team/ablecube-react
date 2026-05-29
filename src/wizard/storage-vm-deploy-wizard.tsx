@@ -84,22 +84,23 @@ const DEFAULT_HOSTS: ClusterHostRow[] = [
 const ROOT_DISK = "150 GiB (THIN Provisioning)";
 
 const RAID_DISKS: DiskOption[] = [
-  { id: "TEST!! raid-1", value: "0000:5e:00.0", label: "0000:5e:00.0 Broadcom MegaRAID SAS-3 Controller" },
+  { id: "raid-1", value: "0000:5e:00.0", label: "TEST!! 0000:5e:00.0 Broadcom MegaRAID SAS-3 Controller" },
 ];
 
 const LUN_DISKS: DiskOption[] = [
-  { id: "TEST!! lun-1", value: "/dev/disk/by-path/pci-0000:5e:00.0-scsi-0:2:0:0", label: "/dev/sdb running 1.8T INTEL_SSD" },
+  { id: "lun-1", value: "/dev/disk/by-path/pci-0000:5e:00.0-scsi-0:2:0:0", label: "TEST!! /dev/sdb running 1.8T INTEL_SSD" },
 ];
 
 const BRIDGE_OPTIONS: SelectOption[] = [
-  { value: "TEST!! bridge0", label: "bridge0 (connected)" },
+  { value: "", label: "선택하십시오" },
+  { value: "bridge0", label: "TEST!! bridge0 (connected)" },
 ];
 
 const NIC_OPTIONS: SelectOption[] = [
-  { value: "TEST!! 0000:18:00.0", label: "eno1 ethernet 0000:18:00.0 (connected)" },
-  { value: "TEST!! 0000:18:00.1", label: "eno2 ethernet 0000:18:00.1 (connected)" },
-  { value: "TEST!! 0000:3b:00.0", label: "ens1f0 ethernet 0000:3b:00.0 (connected)" },
-  { value: "TEST!! 0000:3b:00.1", label: "ens1f1 ethernet 0000:3b:00.1 (connected)" },
+  { value: "0000:18:00.0", label: "TEST!! eno1 ethernet 0000:18:00.0 (connected)" },
+  { value: "0000:18:00.1", label: "TEST!! eno2 ethernet 0000:18:00.1 (connected)" },
+  { value: "0000:3b:00.0", label: "TEST!! ens1f0 ethernet 0000:3b:00.0 (connected)" },
+  { value: "0000:3b:00.1", label: "TEST!! ens1f1 ethernet 0000:3b:00.1 (connected)" },
 ];
 
 export default function StorageVmDeployWizardModal({
